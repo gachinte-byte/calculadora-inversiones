@@ -42,17 +42,27 @@ th{font-size:11px;color:#66717d}
  .results{grid-template-columns:1fr}.result.main{grid-column:auto}
  .scenarios{grid-template-columns:1fr 1fr}.rate-pair{grid-template-columns:1fr}
 }
+
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:4px}.brand h1{margin:0}
+.brand-icon{width:42px;height:42px;border-radius:13px;background:#18212b;color:#fff;display:grid;place-items:center;font-weight:800;font-size:20px}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:9px}.secondary{width:100%;height:50px;border:1px solid #d1d7dc;border-radius:12px;background:#fff;color:#18212b;font-size:15px;font-weight:700;cursor:pointer}
+.hero-result{background:#18212b;color:#fff;border-radius:20px;padding:22px 20px;margin-bottom:14px}.hero-label{font-size:11px;letter-spacing:.08em;opacity:.75}.hero-value{font-size:32px;font-weight:800;margin:5px 0;overflow-wrap:anywhere}.hero-gain{font-size:14px;opacity:.82}
+.history-item{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:14px 0;border-bottom:1px solid #e7eaed}.history-item:last-child{border-bottom:0}.history-main{min-width:0}.history-title{font-weight:750}.history-meta{font-size:12px;color:#66717d;margin-top:3px}.history-result{text-align:right;font-weight:750;white-space:nowrap}.history-empty{font-size:13px;color:#66717d;padding:12px 0}
+@media(max-width:420px){.actions{grid-template-columns:1fr}.hero-value{font-size:28px}}
+
+.delete-history{width:36px;height:36px;flex:0 0 36px;border:1px solid #d7dce0;border-radius:9px;background:#fff;color:#66717d;font-size:22px;line-height:1;cursor:pointer}
+.delete-history:hover{background:#f1f3f5;color:#18212b}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Simulador FIC / CDT</h1>
-  <div class="sub">Calcula, proyecta y compara el rendimiento de tu dinero.</div>
+  <div class="brand"><div class="brand-icon">₿</div><div><h1>Mis Inversiones</h1><div class="sub">Simula y compara el rendimiento de tu dinero.</div></div></div>
 
   <div class="nav" role="tablist">
     <button class="active" data-page="sim">Simulador</button>
     <button data-page="monthly">Proyección mensual</button>
     <button data-page="rates">Escenarios EA</button>
+    <button data-page="history">Historial</button>
   </div>
 
   <section id="sim" class="page active">
@@ -79,9 +89,14 @@ th{font-size:11px;color:#66717d}
       </div>
 
       <div id="error" class="err" aria-live="polite"></div>
-      <button class="primary" id="calc">CALCULAR</button>
+      <div class="actions"><button class="primary" id="calc">CALCULAR</button><button class="secondary" id="reset" type="button">↻ Nueva simulación</button></div>
     </div>
 
+    <div class="hero-result">
+      <div class="hero-label">VALOR FINAL NETO ESTIMADO</div>
+      <div class="hero-value" id="heroFinal">$—</div>
+      <div class="hero-gain" id="heroGain">Ganancia neta: —</div>
+    </div>
     <div class="card">
       <div class="rate-pair">
         <div class="result">
@@ -128,6 +143,15 @@ th{font-size:11px;color:#66717d}
     <div class="card">
       <h3 style="margin-top:0">Comparación rápida</h3>
       <div class="scenarios" id="scenarioCards"></div>
+    </div>
+  </section>
+
+  <section id="history" class="page">
+    <div class="card">
+      <h2 style="margin-top:0">Historial</h2>
+      <p class="small">Guarda tus últimas simulaciones en este dispositivo. Los datos no se envían a ningún servidor.</p>
+      <div id="historyList"></div>
+      <button class="secondary" id="clearHistory" type="button">Borrar historial</button>
     </div>
   </section>
 
@@ -192,6 +216,8 @@ th{font-size:11px;color:#66717d}
    $('cost').textContent=money(cost);
    $('net').textContent=money(n);
    $('final').textContent=money(f);
+   $('heroFinal').textContent=money(f);
+   $('heroGain').textContent='Ganancia neta: '+money(n);
    renderMonthly(x);
    renderRates(x);
    return true;
@@ -226,6 +252,33 @@ th{font-size:11px;color:#66717d}
      cards.insertAdjacentHTML('beforeend',
        `<div class="scenario"><strong>${rr.toFixed(2)}%</strong><span>Ganancia neta<br>${money(n)}</span></div>`);
    });
+ }
+
+
+ const HISTORY_KEY='simulador_fic_cdt_historial_v1';
+ function getHistory(){try{return JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]')}catch(e){return[]}}
+ function saveHistoryItem(){
+   const x=nums(); if(!valid(x)) return;
+   const rate=Math.pow(1+x.ea,x.days/365)-1, gross=x.capital*rate, net=gross*(1-x.ret), final=x.capital+net;
+   let h=getHistory();
+   h.unshift({date:new Date().toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'}),capital:x.capital,ea:x.ea,days:x.days,ret:x.ret,final:final,net:net});
+   h=h.slice(0,10);
+   try{localStorage.setItem(HISTORY_KEY,JSON.stringify(h))}catch(e){}
+   renderHistory();
+ }
+ function renderHistory(){
+   const box=$('historyList'),h=getHistory();
+   if(!h.length){box.innerHTML='<div class="history-empty">Todavía no hay simulaciones guardadas.</div>';return}
+   box.innerHTML=h.map((v,i)=>`<div class="history-item"><div class="history-main"><div class="history-title">${money(v.capital)} · ${(v.ea*100).toFixed(2)}% E.A.</div><div class="history-meta">${v.days} días · ${v.date} · ReteFuente ${(v.ret*100).toFixed(0)}%</div></div><div class="history-result">${money(v.final)}<br><span style="font-size:12px;color:#66717d">+${money(v.net)}</span></div><button class="delete-history" type="button" data-history-index="${i}" aria-label="Borrar esta simulación">×</button></div>`).join('');
+   box.querySelectorAll('.delete-history').forEach(btn=>btn.addEventListener('click',()=>{
+     const i=Number(btn.dataset.historyIndex); let items=getHistory(); items.splice(i,1);
+     try{localStorage.setItem(HISTORY_KEY,JSON.stringify(items))}catch(e){}
+     renderHistory();
+   }));
+ }
+ function resetForm(){
+   $('capital').value='1.000.000'; $('ea').value='10'; $('days').value='30'; $('ret').value='4';
+   formatCapital(); calculate();
  }
 
  document.querySelectorAll('.nav button').forEach(b=>{
@@ -273,14 +326,16 @@ th{font-size:11px;color:#66717d}
    saveValues();
  });
  $('calc').addEventListener('click',()=>{
-   calculate();
-   saveValues();
+   if(calculate()){ saveValues(); saveHistoryItem(); }
  });
  ['ea','days','ret'].forEach(id=>$(id).addEventListener('input',()=>{
    calculate();
    saveValues();
  }));
 
+ $('reset').addEventListener('click',resetForm);
+ $('clearHistory').addEventListener('click',()=>{try{localStorage.removeItem(HISTORY_KEY)}catch(e){}renderHistory()});
+ renderHistory();
  loadValues();
  formatCapital();
  calculate();
