@@ -237,17 +237,51 @@ th{font-size:11px;color:#66717d}
    });
  });
 
- $('capital').addEventListener('input',()=>{
-   const pos=$('capital').selectionStart;
-   formatCapital();
-   const len=$('capital').value.length;
-   try{$('capital').setSelectionRange(len,len)}catch(e){}
-   calculate();
- });
- $('capital').addEventListener('blur',formatCapital);
- $('calc').addEventListener('click',calculate);
- ['ea','days','ret'].forEach(id=>$(id).addEventListener('input',calculate));
+ const STORAGE_KEY='simulador_fic_cdt_valores_v1';
 
+ function saveValues(){
+   try{
+     localStorage.setItem(STORAGE_KEY, JSON.stringify({
+       capital: parseCapital(),
+       ea: $('ea').value,
+       days: $('days').value,
+       ret: $('ret').value
+     }));
+   }catch(e){}
+ }
+
+ function loadValues(){
+   try{
+     const saved=JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+     if(saved){
+       if(Number.isFinite(Number(saved.capital)) && Number(saved.capital)>0)
+         $('capital').value=new Intl.NumberFormat('es-CO',{maximumFractionDigits:0}).format(Number(saved.capital));
+       if(saved.ea!==undefined) $('ea').value=saved.ea;
+       if(saved.days!==undefined) $('days').value=saved.days;
+       if(saved.ret!==undefined) $('ret').value=saved.ret;
+     }
+   }catch(e){}
+ }
+
+ $('capital').addEventListener('input',()=>{
+   formatCapital();
+   calculate();
+   saveValues();
+ });
+ $('capital').addEventListener('blur',()=>{
+   formatCapital();
+   saveValues();
+ });
+ $('calc').addEventListener('click',()=>{
+   calculate();
+   saveValues();
+ });
+ ['ea','days','ret'].forEach(id=>$(id).addEventListener('input',()=>{
+   calculate();
+   saveValues();
+ }));
+
+ loadValues();
  formatCapital();
  calculate();
 })();
