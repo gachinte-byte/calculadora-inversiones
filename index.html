@@ -58,6 +58,7 @@ th{font-size:11px;color:#66717d}
 
 .delete-history{width:36px;height:36px;flex:0 0 36px;border:1px solid #d7dce0;border-radius:9px;background:#fff;color:#66717d;font-size:22px;line-height:1;cursor:pointer}
 .delete-history:hover{background:#f1f3f5;color:#18212b}
+.edit-history{width:36px;height:36px;flex:0 0 36px;border:1px solid #d7dce0;border-radius:9px;background:#fff;color:#18212b;font-size:18px;line-height:1;cursor:pointer}.edit-history:hover{background:#f1f3f5}
 </style>
 </head>
 <body>
@@ -272,10 +273,22 @@ th{font-size:11px;color:#66717d}
    try{localStorage.setItem(HISTORY_KEY,JSON.stringify(h))}catch(e){}
    renderHistory();
  }
+ function editHistoryDescription(i){
+   const h=getHistory(), item=h[i];
+   if(!item) return;
+   const value=window.prompt('Descripción de esta inversión:', item.description || '');
+   if(value===null) return;
+   item.description=value.trim().slice(0,50);
+   try{localStorage.setItem(HISTORY_KEY,JSON.stringify(h))}catch(e){}
+   renderHistory();
+ }
  function renderHistory(){
    const box=$('historyList'),h=getHistory();
    if(!h.length){box.innerHTML='<div class="history-empty">Todavía no hay simulaciones guardadas.</div>';return}
-   box.innerHTML=h.map((v,i)=>`<div class="history-item"><div class="history-main"><div class="history-title">${money(v.capital)} · ${(v.ea*100).toFixed(2)}% E.A.</div><div class="history-meta">${v.days} días · ${v.date} · ReteFuente ${(v.ret*100).toFixed(0)}%</div></div><div class="history-result">${money(v.final)}<br><span style="font-size:12px;color:#66717d">+${money(v.net)}</span></div><button class="delete-history" type="button" data-history-index="${i}" aria-label="Borrar esta simulación">×</button></div>`).join('');
+   box.innerHTML=h.map((v,i)=>`<div class="history-item"><div class="history-main"><div class="history-title">${escapeHtml(v.description || 'Añadir descripción')}</div><div class="history-meta">${money(v.capital)} · ${(v.ea*100).toFixed(2)}% E.A. · ${v.days} días · ReteFuente ${(v.ret*100).toFixed(0)}% · ${v.date}</div></div><div class="history-result">${money(v.final)}<br><span style="font-size:12px;color:#66717d">+${money(v.net)}</span></div><button class="edit-history" type="button" data-history-index="${i}" aria-label="Editar descripción">✎</button><button class="delete-history" type="button" data-history-index="${i}" aria-label="Borrar esta simulación">×</button></div>`).join('');
+   box.querySelectorAll('.edit-history').forEach(btn=>btn.addEventListener('click',()=>{
+     editHistoryDescription(Number(btn.dataset.historyIndex));
+   }));
    box.querySelectorAll('.delete-history').forEach(btn=>btn.addEventListener('click',()=>{
      const i=Number(btn.dataset.historyIndex); let items=getHistory(); items.splice(i,1);
      try{localStorage.setItem(HISTORY_KEY,JSON.stringify(items))}catch(e){}
