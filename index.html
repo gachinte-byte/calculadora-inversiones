@@ -273,6 +273,9 @@ th{font-size:11px;color:#66717d}
    try{localStorage.setItem(HISTORY_KEY,JSON.stringify(h))}catch(e){}
    renderHistory();
  }
+ function escapeHtml(text){
+   return String(text).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+ }
  function editHistoryDescription(i){
    const h=getHistory(), item=h[i];
    if(!item) return;
