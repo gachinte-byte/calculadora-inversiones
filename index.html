@@ -378,188 +378,245 @@ th{font-size:11px;color:#66717d}
 
 
  
+
   /* ================= SUMAR · CUENTAS ================= */
-  const SUMAR_KEY='gaachinte_sumar_cuentas_v1';
-  const SUMAR_TRAMOS_KEY='gaachinte_sumar_tramos_cuentas_v1';
+  const SUMAR_KEY='gaachinte_sumar_cuentas_v2';
+  const SUMAR_TRAMOS_KEY='gaachinte_sumar_tramos_cuentas_v2';
   let sumarAccounts=[];
-  let sumarSelectedId=null;
+  let sumarSelectedId='';
 
   function sumarLoadAccounts(){
-    try{sumarAccounts=JSON.parse(localStorage.getItem(SUMAR_KEY)||'[]')}catch(e){sumarAccounts=[]}
-    if(!Array.isArray(sumarAccounts)||!sumarAccounts.length){
+    var raw=null;
+    try{raw=localStorage.getItem(SUMAR_KEY)}catch(e){}
+    try{sumarAccounts=raw?JSON.parse(raw):[]}catch(e){sumarAccounts=[]}
+    if(!Array.isArray(sumarAccounts))sumarAccounts=[];
+    if(sumarAccounts.length===0){
       sumarAccounts=[{id:'default',name:'Sumar principal',rows:[]}];
       sumarSelectedId='default';
       sumarSaveAccounts();
     }
-    if(!sumarSelectedId||!sumarAccounts.some(a=>a.id===sumarSelectedId))sumarSelectedId=sumarAccounts[0].id;
+    if(!sumarSelectedId||!sumarAccounts.some(function(a){return a.id===sumarSelectedId;})){
+      sumarSelectedId=sumarAccounts[0].id;
+    }
   }
-  function sumarSaveAccounts(){try{localStorage.setItem(SUMAR_KEY,JSON.stringify(sumarAccounts))}catch(e){}}
-  function sumarGetAccount(){return sumarAccounts.find(a=>a.id===sumarSelectedId)||null}
-  function sumarGetTramos(){try{const x=JSON.parse(localStorage.getItem(SUMAR_TRAMOS_KEY)||'[]');return Array.isArray(x)?x:[]}catch(e){return[]}}
+
+  function sumarSaveAccounts(){
+    try{localStorage.setItem(SUMAR_KEY,JSON.stringify(sumarAccounts))}catch(e){}
+  }
+  function sumarGetAccount(){
+    for(var i=0;i<sumarAccounts.length;i++){if(sumarAccounts[i].id===sumarSelectedId)return sumarAccounts[i];}
+    return null;
+  }
+  function sumarGetTramos(){
+    try{
+      var x=JSON.parse(localStorage.getItem(SUMAR_TRAMOS_KEY)||'[]');
+      return Array.isArray(x)?x:[];
+    }catch(e){return[]}
+  }
   function sumarSaveTramos(x){try{localStorage.setItem(SUMAR_TRAMOS_KEY,JSON.stringify(x))}catch(e){}}
-  function sumarParseMoney(id){const raw=$(id).value.replace(/\D/g,'');return raw?Number(raw):0}
-  function sumarFormatMoney(id){const n=sumarParseMoney(id);$(id).value=n?new Intl.NumberFormat('es-CO',{maximumFractionDigits:0}).format(n):''}
-  function sumarDateNow(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
-  function sumarDateFmt(s){if(!s)return'—';const [y,m,d]=s.split('-');return `${d}/${m}/${y}`}
-  function sumarMoney2(n){return new Intl.NumberFormat('es-CO',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n)}
-  function sumarPct(n){return new Intl.NumberFormat('es-CO',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n*100)+'%'}
-  function sumarDaysBetween(a,b){return Math.max(1,Math.round((new Date(b+'T12:00:00')-new Date(a+'T12:00:00'))/86400000))}
+  function sumarParseMoney(id){
+    var el=$(id);if(!el)return 0;
+    var raw=String(el.value||'').replace(/\D/g,'');
+    return raw?Number(raw):0;
+  }
+  function sumarFormatMoney(id){
+    var n=sumarParseMoney(id);
+    $(id).value=n?new Intl.NumberFormat('es-CO',{maximumFractionDigits:0}).format(n):'';
+  }
+  function sumarDateNow(d){
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  }
+  function sumarDateFmt(s){
+    if(!s)return'—';
+    var p=s.split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:s;
+  }
+  function sumarMoney2(n){
+    return new Intl.NumberFormat('es-CO',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n);
+  }
+  function sumarPct(n){
+    return new Intl.NumberFormat('es-CO',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n*100)+'%';
+  }
+  function sumarDaysBetween(a,b){
+    var x=new Date(a+'T12:00:00'),y=new Date(b+'T12:00:00');
+    return Math.max(1,Math.round((y-x)/86400000));
+  }
   function sumarEA(d){return Math.pow(1+d,365)-1}
 
+  function sumarRecalculate(a){
+    if(!a)return;
+    if(!Array.isArray(a.rows))a.rows=[];
+    a.rows.sort(function(x,y){return String(x.date).localeCompare(String(y.date))});
+    for(var i=0;i<a.rows.length;i++){
+      var r=a.rows[i];
+      if(i===0){
+        r.days=null;r.gain=null;r.avg=null;r.dailyRate=null;r.ea=null;
+      }else{
+        var p=a.rows[i-1];
+        var days=sumarDaysBetween(p.date,r.date);
+        var gain=Number(r.balance)-Number(p.balance);
+        var rate=p.balance>0?Math.pow(Number(r.balance)/Number(p.balance),1/days)-1:0;
+        r.days=days;r.gain=gain;r.avg=gain/days;r.dailyRate=rate;r.ea=sumarEA(rate);
+      }
+    }
+  }
+
   function renderSumarAccounts(){
-    const s=$('sumarAccountSelect');
-    s.innerHTML=sumarAccounts.map(a=>`<option value="${a.id}">${a.name}</option>`).join('');
+    var s=$('sumarAccountSelect');
+    s.innerHTML='';
+    for(var i=0;i<sumarAccounts.length;i++){
+      var o=document.createElement('option');
+      o.value=sumarAccounts[i].id;o.textContent=sumarAccounts[i].name;s.appendChild(o);
+    }
     s.value=sumarSelectedId;
-    renderSumarAccountSummary();
   }
 
   function renderSumarAccountSummary(){
-    const a=sumarGetAccount();
-    const rows=(a?.rows||[]).slice().sort((x,y)=>x.date.localeCompare(y.date));
-    const last=rows[rows.length-1];
+    var a=sumarGetAccount(),rows=a&&Array.isArray(a.rows)?a.rows.slice():[];
+    rows.sort(function(x,y){return String(x.date).localeCompare(String(y.date))});
+    var last=rows.length?rows[rows.length-1]:null;
     $('sumarAccountBalance').textContent=last?money(last.balance):'—';
-    $('sumarAccountGain').textContent=last?.gain!=null?money2(last.gain):'—';
-    const gains=rows.filter(x=>x.gain!=null);
-    $('sumarAccountAvg').textContent=gains.length?money2(gains.reduce((s,x)=>s+x.gain,0)/gains.length):'—';
-    $('sumarAccountEA').textContent=last?.ea!=null?sumarPct(last.ea):'—';
-  }
-
-  function sumarRecalculate(a){
-    a.rows.sort((x,y)=>x.date.localeCompare(y.date));
-    a.rows.forEach((r,i)=>{
-      if(i===0){r.days=null;r.gain=null;r.avg=null;r.ea=null;return}
-      const p=a.rows[i-1];
-      const days=sumarDaysBetween(p.date,r.date);
-      const gain=r.balance-p.balance;
-      r.days=days;
-      r.gain=gain;
-      r.avg=gain/days;
-      r.ea=p.balance>0?sumarEA(Math.pow(r.balance/p.balance,1/days)-1):null;
-    });
+    $('sumarAccountGain').textContent=last&&last.gain!==null&&last.gain!==undefined?money2(last.gain):'—';
+    var gains=rows.filter(function(x){return x.gain!==null&&x.gain!==undefined});
+    var avg=0;
+    if(gains.length){for(var i=0;i<gains.length;i++)avg+=Number(gains[i].gain);avg/=gains.length}
+    $('sumarAccountAvg').textContent=gains.length?money2(avg):'—';
+    $('sumarAccountEA').textContent=last&&last.ea!==null&&last.ea!==undefined?sumarPct(last.ea):'—';
   }
 
   function renderSumarDaily(){
-    const a=sumarGetAccount();
-    const rows=(a?.rows||[]).slice().sort((x,y)=>x.date.localeCompare(y.date));
-    $('sumarRowsCount').textContent=`${rows.length} registro${rows.length===1?'':'s'}`;
-    $('sumarDailyBody').innerHTML=rows.length
-      ?rows.map(r=>`<tr>
-          <td>${sumarDateFmt(r.date)}</td>
-          <td>${r.days?`${r.days} día${r.days===1?'':'s'}`:'—'}</td>
-          <td>${money(r.balance)}</td>
-          <td>${r.gain!=null?money2(r.gain):'—'}</td>
-          <td>${r.avg!=null?money2(r.avg):'—'}</td>
-          <td>${r.ea!=null?sumarPct(r.ea):'—'}</td>
-          <td><button class="delete-history" data-sumar-row="${r.id}" title="Eliminar">×</button></td>
-        </tr>`).join('')
-      :'<tr><td colspan="7" class="history-empty">Todavía no hay saldos registrados para esta cuenta.</td></tr>';
-
-    $('sumarDailyBody').querySelectorAll('[data-sumar-row]').forEach(btn=>btn.addEventListener('click',()=>{
-      const a=sumarGetAccount(),id=Number(btn.dataset.sumarRow);
-      if(a&&confirm('¿Eliminar este registro?')){
-        a.rows=a.rows.filter(r=>r.id!==id);
-        sumarRecalculate(a);sumarSaveAccounts();
-        renderSumarDaily();renderSumarAccountSummary();renderSumarPeriod();renderSavedSumarHistory();
-      }
-    }));
+    var a=sumarGetAccount(),rows=a&&Array.isArray(a.rows)?a.rows.slice():[];
+    rows.sort(function(x,y){return String(x.date).localeCompare(String(y.date))});
+    $('sumarRowsCount').textContent=rows.length+' registro'+(rows.length===1?'':'s');
+    if(!rows.length){
+      $('sumarDailyBody').innerHTML='<tr><td colspan="7" class="history-empty">Todavía no hay saldos registrados para esta cuenta.</td></tr>';
+      return;
+    }
+    var out='';
+    for(var i=0;i<rows.length;i++){
+      var r=rows[i];
+      out+='<tr><td>'+sumarDateFmt(r.date)+'</td><td>'+(r.days?(r.days+' día'+(r.days===1?'':'s')):'—')+'</td><td>'+money(r.balance)+'</td><td>'+(r.gain!==null&&r.gain!==undefined?money2(r.gain):'—')+'</td><td>'+(r.avg!==null&&r.avg!==undefined?money2(r.avg):'—')+'</td><td>'+(r.ea!==null&&r.ea!==undefined?sumarPct(r.ea):'—')+'</td><td><button class="delete-history" data-sumar-row="'+r.id+'" title="Eliminar">×</button></td></tr>';
+    }
+    $('sumarDailyBody').innerHTML=out;
+    $('sumarDailyBody').querySelectorAll('[data-sumar-row]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        var a=sumarGetAccount(),id=Number(btn.dataset.sumarRow);
+        if(a&&confirm('¿Eliminar este registro?')){
+          a.rows=a.rows.filter(function(r){return Number(r.id)!==id});
+          sumarRecalculate(a);sumarSaveAccounts();
+          renderSumarDaily();renderSumarAccountSummary();renderSumarPeriod();renderSavedSumarHistory();
+        }
+      });
+    });
   }
 
   function renderSumarPeriod(){
-    const a=sumarGetAccount();
-    const rows=(a?.rows||[]).slice().sort((x,y)=>x.date.localeCompare(y.date));
-    if(rows.length<2){
-      $('sumarPeriodGain').textContent='—';
-      $('sumarPeriodAvg').textContent='—';
-      $('sumarPeriodEA').textContent='—';
-      $('sumarPeriodDays').textContent=rows.length?'1':'—';
-      $('sumarCurrent').textContent=rows.length?money(rows[rows.length-1].balance):'—';
-      return;
+    var a=sumarGetAccount(),rows=a&&Array.isArray(a.rows)?a.rows.slice():[];
+    rows.sort(function(x,y){return String(x.date).localeCompare(String(y.date))});
+    if(!rows.length){
+      $('sumarCurrent').textContent='—';$('sumarStatus').textContent='Registra un saldo para comenzar.';
+      $('sumarPeriodGain').textContent='—';$('sumarPeriodAvg').textContent='—';$('sumarPeriodEA').textContent='—';$('sumarPeriodDays').textContent='—';return;
     }
-    const first=rows[0],last=rows[rows.length-1];
-    const days=sumarDaysBetween(first.date,last.date);
-    const gain=last.balance-first.balance;
-    const rate=first.balance>0?Math.pow(last.balance/first.balance,1/days)-1:0;
+    var last=rows[rows.length-1];$('sumarCurrent').textContent=money(last.balance);
+    if(rows.length<2){
+      $('sumarStatus').textContent='Hay 1 saldo registrado. Agrega otro para calcular el rendimiento.';
+      $('sumarPeriodGain').textContent='—';$('sumarPeriodAvg').textContent='—';$('sumarPeriodEA').textContent='—';$('sumarPeriodDays').textContent='1';return;
+    }
+    var first=rows[0],days=sumarDaysBetween(first.date,last.date),gain=Number(last.balance)-Number(first.balance);
+    var rate=first.balance>0?Math.pow(Number(last.balance)/Number(first.balance),1/days)-1:0;
     $('sumarPeriodGain').textContent=money(gain);
     $('sumarPeriodAvg').textContent=money2(gain/days);
     $('sumarPeriodEA').textContent=sumarPct(sumarEA(rate));
     $('sumarPeriodDays').textContent=days;
-    $('sumarCurrent').textContent=money(last.balance);
-    $('sumarStatus').textContent=`Último saldo registrado: ${sumarDateFmt(last.date)}.`;
+    $('sumarStatus').textContent='Último saldo: '+sumarDateFmt(last.date)+' · '+days+' días desde el primer registro.';
   }
 
   function saveSumarDaily(){
-    const a=sumarGetAccount(),date=$('sumarCurrentDate').value,balance=sumarParseMoney('sumarCurrentBalance');
-    if(!a||!date||!balance){$('sumarError').textContent='Ingresa la fecha y el saldo final.';return}
-    const existing=a.rows.find(r=>r.date===date);
+    var a=sumarGetAccount(),date=$('sumarCurrentDate').value,balance=sumarParseMoney('sumarCurrentBalance');
+    if(!a||!date||!balance){$('sumarError').textContent='Ingresa una fecha y un saldo final mayor que cero.';return}
+    if(!Array.isArray(a.rows))a.rows=[];
+    var existing=null;
+    for(var i=0;i<a.rows.length;i++){if(a.rows[i].date===date){existing=a.rows[i];break}}
     if(existing){
-      if(!confirm('Ya existe un saldo para esta fecha. ¿Reemplazarlo?'))return;
+      if(!confirm('Ya existe un registro para '+sumarDateFmt(date)+'. ¿Quieres reemplazar el saldo?'))return;
       existing.balance=balance;
     }else{
-      a.rows.push({id:Date.now(),date,balance});
+      a.rows.push({id:Date.now(),date:date,balance:balance});
     }
-    sumarRecalculate(a);
-    sumarSaveAccounts();
+    sumarRecalculate(a);sumarSaveAccounts();
     renderSumarDaily();renderSumarAccountSummary();renderSumarPeriod();renderSavedSumarHistory();
     $('sumarCurrentBalance').value='';
     $('sumarError').textContent='';
-    $('sumarStatus').textContent='Saldo guardado correctamente.';
   }
 
   function addSumarAccount(){
-    const name=prompt('Nombre de la nueva cuenta o inversión:','Sumar – Banco de Bogotá');
+    var name=prompt('Nombre de la nueva cuenta o inversión:','Sumar – Banco de Bogotá');
     if(!name||!name.trim())return;
     sumarSelectedId='acc_'+Date.now();
     sumarAccounts.push({id:sumarSelectedId,name:name.trim(),rows:[]});
-    sumarSaveAccounts();renderSumarAccounts();renderSumarDaily();renderSumarPeriod();renderSavedSumarHistory();
+    sumarSaveAccounts();renderSumarAccounts();renderSumarDaily();renderSumarAccountSummary();renderSumarPeriod();renderSavedSumarHistory();
   }
 
   function renameSumarAccount(){
-    const a=sumarGetAccount();
-    if(!a)return;
-    const name=prompt('Nuevo nombre de la cuenta:',a.name);
+    var a=sumarGetAccount();if(!a)return;
+    var name=prompt('Nuevo nombre de la cuenta:',a.name);
     if(!name||!name.trim())return;
-    a.name=name.trim();
-    sumarSaveAccounts();renderSumarAccounts();renderSavedSumarHistory();
+    a.name=name.trim();sumarSaveAccounts();renderSumarAccounts();renderSavedSumarHistory();
   }
 
   function deleteSumarAccount(){
     if(sumarAccounts.length<=1){alert('Debes conservar al menos una cuenta.');return}
-    const a=sumarGetAccount();
-    if(a&&confirm(`¿Eliminar "${a.name}" y todos sus registros?`)){
-      sumarAccounts=sumarAccounts.filter(x=>x.id!==a.id);
-      sumarSelectedId=sumarAccounts[0].id;
-      sumarSaveAccounts();renderSumarAccounts();renderSumarDaily();renderSumarPeriod();renderSavedSumarHistory();
-    }
+    var a=sumarGetAccount();if(!a)return;
+    if(!confirm('¿Eliminar "'+a.name+'" y todos sus registros?'))return;
+    sumarAccounts=sumarAccounts.filter(function(x){return x.id!==a.id});
+    sumarSelectedId=sumarAccounts[0].id;sumarSaveAccounts();
+    renderSumarAccounts();renderSumarDaily();renderSumarAccountSummary();renderSumarPeriod();renderSavedSumarHistory();
   }
 
   function saveSumarTramo(){
-    const a=sumarGetAccount();
-    const rows=(a?.rows||[]).slice().sort((x,y)=>x.date.localeCompare(y.date));
+    var a=sumarGetAccount(),rows=a&&Array.isArray(a.rows)?a.rows.slice():[];
+    rows.sort(function(x,y){return String(x.date).localeCompare(String(y.date))});
     if(!a||rows.length<2){$('sumarError').textContent='Necesitas al menos dos saldos registrados.';return}
-    const first=rows[0],last=rows[rows.length-1],days=sumarDaysBetween(first.date,last.date);
-    const gain=last.balance-first.balance;
-    const rate=first.balance>0?Math.pow(last.balance/first.balance,1/days)-1:0;
-    const h=sumarGetTramos();
-    h.push({id:Date.now(),accountId:a.id,accountName:a.name,startDate:first.date,endDate:last.date,startBalance:first.balance,endBalance:last.balance,days,gain,avg:gain/days,ea:sumarEA(rate)});
-    sumarSaveTramos(h);renderSavedSumarHistory();$('sumarStatus').textContent='Tramo guardado en el historial.';
+    var first=rows[0],last=rows[rows.length-1],days=sumarDaysBetween(first.date,last.date),gain=Number(last.balance)-Number(first.balance);
+    var rate=first.balance>0?Math.pow(Number(last.balance)/Number(first.balance),1/days)-1:0;
+    var h=sumarGetTramos();
+    h.push({id:Date.now(),accountId:a.id,accountName:a.name,startDate:first.date,endDate:last.date,startBalance:first.balance,endBalance:last.balance,days:days,gain:gain,avg:gain/days,ea:sumarEA(rate)});
+    sumarSaveTramos(h);renderSavedSumarHistory();$('sumarError').textContent='';$('sumarStatus').textContent='Tramo guardado en el historial.';
   }
 
   function renderSavedSumarHistory(){
-    const box=$('sumarSavedHistory'),a=sumarGetAccount();
-    const h=sumarGetTramos().filter(x=>x.accountId===a?.id).slice().reverse();
+    var box=$('sumarSavedHistory'),a=sumarGetAccount(),all=sumarGetTramos(),h=[];
+    for(var i=0;i<all.length;i++){if(a&&all[i].accountId===a.id)h.push(all[i])}
+    h.reverse();
     if(!h.length){box.innerHTML='<div class="history-empty">No hay tramos guardados para esta cuenta.</div>';return}
-    box.innerHTML=h.map(r=>`<div class="saved-sumar">
-      <div class="section-head">
-        <div><strong>${sumarDateFmt(r.startDate)} → ${sumarDateFmt(r.endDate)}</strong><div class="small">${r.days} días · ${money(r.startBalance)} → ${money(r.endBalance)}</div></div>
-        <button class="delete-history" data-sumar-tramo="${r.id}" title="Eliminar">×</button>
-      </div>
-      <div class="small" style="margin-top:7px">Rendimiento: <strong>${money(r.gain)}</strong> · Promedio diario: <strong>${money2(r.avg)}</strong> · E.A.: <strong>${sumarPct(r.ea)}</strong></div>
-    </div>`).join('');
-    box.querySelectorAll('[data-sumar-tramo]').forEach(btn=>btn.addEventListener('click',()=>{
-      const id=Number(btn.dataset.sumarTramo),x=sumarGetTramos();
-      if(confirm('¿Eliminar este tramo?')){sumarSaveTramos(x.filter(r=>r.id!==id));renderSavedSumarHistory()}
-    }));
+    var out='';
+    for(var j=0;j<h.length;j++){
+      var r=h[j];
+      out+='<div class="saved-sumar"><div class="section-head"><div><strong>'+sumarDateFmt(r.startDate)+' → '+sumarDateFmt(r.endDate)+'</strong><div class="small">'+r.days+' días · '+money(r.startBalance)+' → '+money(r.endBalance)+'</div></div><button class="delete-history" data-sumar-tramo="'+r.id+'" title="Eliminar">×</button></div><div class="small" style="margin-top:7px">Rendimiento: <strong>'+money(r.gain)+'</strong> · Promedio diario: <strong>'+money2(r.avg)+'</strong> · E.A.: <strong>'+sumarPct(r.ea)+'</strong></div></div>';
+    }
+    box.innerHTML=out;
+    box.querySelectorAll('[data-sumar-tramo]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        var id=Number(btn.dataset.sumarTramo),x=sumarGetTramos();
+        if(confirm('¿Eliminar este tramo?')){sumarSaveTramos(x.filter(function(r){return Number(r.id)!==id}));renderSavedSumarHistory()}
+      });
+    });
   }
+
+  /* Inicialización de Sumar */
+  sumarLoadAccounts();
+  renderSumarAccounts();
+  $('sumarCurrentDate').value=sumarDateNow(new Date());
+  $('sumarAccountSelect').addEventListener('change',function(){
+    sumarSelectedId=$('sumarAccountSelect').value;
+    renderSumarAccountSummary();renderSumarDaily();renderSumarPeriod();renderSavedSumarHistory();
+  });
+  $('sumarAddAccount').addEventListener('click',addSumarAccount);
+  $('sumarRenameAccount').addEventListener('click',renameSumarAccount);
+  $('sumarDeleteAccount').addEventListener('click',deleteSumarAccount);
+  $('sumarCurrentBalance').addEventListener('input',function(){sumarFormatMoney('sumarCurrentBalance')});
+  $('saveSumarDaily').addEventListener('click',saveSumarDaily);
+  $('saveSumarTramo').addEventListener('click',saveSumarTramo);
+  renderSumarDaily();renderSumarAccountSummary();renderSumarPeriod();renderSavedSumarHistory();
 
 const HISTORY_KEY='simulador_fic_cdt_historial_v1';
  function getHistory(){try{return JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]')}catch(e){return[]}}
