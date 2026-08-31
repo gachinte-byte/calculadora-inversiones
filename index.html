@@ -58,7 +58,17 @@ th{font-size:11px;color:#66717d}
 
 .delete-history{width:36px;height:36px;flex:0 0 36px;border:1px solid #d7dce0;border-radius:9px;background:#fff;color:#66717d;font-size:22px;line-height:1;cursor:pointer}
 .delete-history:hover{background:#f1f3f5;color:#18212b}
-.edit-history{width:36px;height:36px;flex:0 0 36px;border:1px solid #d7dce0;border-radius:9px;background:#fff;color:#18212b;font-size:18px;line-height:1;cursor:pointer}.edit-history:hover{background:#f1f3f5}
+
+.section-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.pill{font-size:10px;font-weight:800;letter-spacing:.08em;padding:7px 9px;border-radius:999px;background:#e8f5e9;color:#176b45}
+.secondary.compact{height:38px;width:auto;padding:0 12px;font-size:12px}
+.chart-wrap{margin-top:14px;border:1px solid #e7eaed;border-radius:13px;padding:8px;overflow:hidden}
+.chart-wrap canvas{width:100%;height:auto;display:block}
+.history-edit,.history-delete{width:34px;height:34px;border:1px solid #d7dce0;border-radius:9px;background:#fff;cursor:pointer}
+.history-delete{font-size:18px}
+select{width:100%;height:50px;border:1px solid #d1d7dc;border-radius:12px;background:#fff;padding:0 12px;font-size:16px;color:#18212b}select:focus{border-color:#65727f;box-shadow:0 0 0 3px #e9edf0}
+
+.check-box{margin:10px 0 4px;padding:10px 12px;border-radius:10px;background:#f7f8f9;font-size:12px;color:#66717d;display:none}
 </style>
 </head>
 <body>
@@ -69,6 +79,7 @@ th{font-size:11px;color:#66717d}
     <button class="active" data-page="sim">Simulador</button>
     <button data-page="monthly">Proyección mensual</button>
     <button data-page="rates">Escenarios EA</button>
+    <button data-page="sumar">Sumar</button>
     <button data-page="history">Historial</button>
   </div>
 
@@ -150,6 +161,81 @@ th{font-size:11px;color:#66717d}
     <div class="card">
       <h3 style="margin-top:0">Comparación rápida</h3>
       <div class="scenarios" id="scenarioCards"></div>
+    </div>
+  </section>
+
+
+
+
+  <section id="sumar" class="page">
+    <div class="card">
+      <div class="section-head">
+        <div><h2 style="margin:0">Seguimiento Sumar</h2><div class="small">Registra puntos de control cuando quieras; no necesitas hacerlo todos los días.</div></div>
+        <div class="pill">REAL</div>
+      </div>
+    </div>
+
+    <div class="hero-result">
+      <div class="hero-label">SALDO ACTUAL</div>
+      <div class="hero-value" id="sumarCurrent">$—</div>
+      <div class="hero-gain" id="sumarAccum">Registra al menos 2 puntos de control.</div>
+    </div>
+
+    <div class="results">
+      <div class="result"><div class="k">E.A. observado · 7 días</div><div class="v" id="sumarEA7">—</div></div>
+      <div class="result"><div class="k">E.A. observado · 15 días</div><div class="v" id="sumarEA15">—</div></div>
+      <div class="result"><div class="k">E.A. observado · 30 días</div><div class="v" id="sumarEA30">—</div></div>
+      <div class="result"><div class="k">Puntos de control</div><div class="v" id="sumarDaysCount">0</div></div>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h3 style="margin-top:0">Nuevo punto de control</h3>
+      <div class="small" style="margin-bottom:14px">Puedes registrar hoy y volver a registrar dentro de 3, 5 o 7 días. Si no hubo movimientos, la diferencia entre saldos se interpreta como rendimiento.</div>
+
+      <label for="sumarDate">Fecha</label>
+      <div class="input-wrap"><input id="sumarDate" type="date"></div>
+
+      <label for="sumarBalance">Saldo final informado por Sumar</label>
+      <div class="input-wrap"><span class="prefix">$</span><input id="sumarBalance" type="text" inputmode="numeric" autocomplete="off" placeholder="41.988.911"></div>
+
+      <label for="sumarMovement">¿Hubo aporte o retiro desde el último registro?</label>
+      <div class="input-wrap"><select id="sumarMovement">
+        <option value="none">No</option>
+        <option value="deposit">🔵 Sí, hubo aporte</option>
+        <option value="withdrawal">🔴 Sí, hubo retiro</option>
+      </select></div>
+
+      <label for="sumarMovementAmount">Valor del aporte / retiro</label>
+      <div class="input-wrap"><span class="prefix">$</span><input id="sumarMovementAmount" type="text" inputmode="numeric" autocomplete="off" placeholder="0"></div>
+
+      <label for="sumarReported">Rendimiento informado por Sumar (opcional)</label>
+      <div class="input-wrap"><span class="prefix">$</span><input id="sumarReported" type="text" inputmode="decimal" autocomplete="off" placeholder="Ej. 11.823,36"></div>
+
+      <label for="sumarNote">Nota (opcional)</label>
+      <div class="input-wrap"><input id="sumarNote" type="text" maxlength="60" placeholder="Ej. cierre, aporte, retiro"></div>
+
+      <div id="sumarCheck" class="check-box"></div>
+      <div id="sumarError" class="err"></div>
+      <button class="primary" id="saveSumar" type="button">GUARDAR PUNTO DE CONTROL</button>
+    </div>
+
+    <div class="card">
+      <div class="section-head">
+        <div><h3 style="margin:0">Evolución del saldo</h3><div class="small">Últimos 30 puntos</div></div>
+        <button class="secondary compact" id="clearSumar" type="button">Borrar todo</button>
+      </div>
+      <div class="chart-wrap"><canvas id="sumarChart" width="560" height="240"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">Historial de puntos de control</h3>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Fecha</th><th>Saldo</th><th>Movimiento</th><th>Días</th><th>Rendimiento</th><th>E.A.</th><th></th></tr></thead>
+          <tbody id="sumarBody"></tbody>
+        </table>
+      </div>
+      <div class="note">La E.A. de cada tramo se calcula con el saldo anterior, los días transcurridos y los aportes/retiros registrados. Si no hubo movimientos, todo el cambio entre saldos se considera rendimiento.</div>
     </div>
   </section>
 
@@ -262,6 +348,110 @@ th{font-size:11px;color:#66717d}
  }
 
 
+ function escapeHtml(text){return String(text).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
+
+
+
+
+ const SUMAR_KEY='gaachinte_sumar_points_v1';
+
+ function getSumar(){try{const x=JSON.parse(localStorage.getItem(SUMAR_KEY)||'[]');return Array.isArray(x)?x:[]}catch(e){return[]}}
+ function saveSumarData(x){try{localStorage.setItem(SUMAR_KEY,JSON.stringify(x))}catch(e){}}
+ function parseMoneyInput(id){const raw=$(id).value.replace(/\D/g,'');return raw?Number(raw):0}
+ function parseDecimalMoney(id){const raw=$(id).value.trim().replace(/\./g,'').replace(',','.').replace(/[^\d.-]/g,'');const n=Number(raw);return Number.isFinite(n)?n:0}
+ function formatMoneyInput(id){const n=parseMoneyInput(id);$(id).value=n?new Intl.NumberFormat('es-CO',{maximumFractionDigits:0}).format(n):''}
+ function localDateString(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+ function formatDate(s){if(!s)return'—';const [y,m,d]=s.split('-');return `${d}/${m}/${y}`}
+ function movementSigned(v){return v.movement==='deposit'?Number(v.movementAmount||0):v.movement==='withdrawal'?-Number(v.movementAmount||0):0}
+ function movementLabel(v){if(v.movement==='deposit')return '🔵 +'+money(v.movementAmount);if(v.movement==='withdrawal')return '🔴 −'+money(v.movementAmount);return '—'}
+ function sumarRows(){return getSumar().sort((a,b)=>a.date.localeCompare(b.date))}
+ function daysBetween(a,b){return Math.max(1,(new Date(b+'T12:00:00')-new Date(a+'T12:00:00'))/86400000)}
+
+ // Each interval is independent: final / (previous + capital movement) - 1.
+ function intervalData(rows,i){
+   if(i<=0)return null;
+   const prev=rows[i-1],cur=rows[i],days=daysBetween(prev.date,cur.date);
+   const comparable=prev.balance+movementSigned(cur);
+   if(comparable<=0)return null;
+   const growth=cur.balance/comparable-1;
+   const ea=Math.pow(1+growth,365/days)-1;
+   return {days,base:comparable,growth,ea,gain:cur.balance-comparable};
+ }
+
+ // Calculate a compounded annual equivalent across all observed intervals
+ // that overlap the selected recent calendar-day window.
+ function windowMetrics(rows,windowDays){
+   if(rows.length<2)return null;
+   const latest=rows[rows.length-1];
+   const cutoff=new Date(latest.date+'T12:00:00');cutoff.setDate(cutoff.getDate()-windowDays);
+   let factor=1,totalDays=0,has=false;
+   for(let i=1;i<rows.length;i++){
+     const a=new Date(rows[i-1].date+'T12:00:00'),b=new Date(rows[i].date+'T12:00:00');
+     if(b<=cutoff)continue;
+     // For intervals partially outside the window, require a control at/after cutoff.
+     // We avoid fabricating an unseen balance, so only complete intervals are compounded.
+     if(a<cutoff)continue;
+     const d=intervalData(rows,i);
+     if(!d)continue;
+     factor*=1+d.growth;totalDays+=d.days;has=true;
+   }
+   if(!has||!totalDays)return null;
+   return {ea:Math.pow(factor,365/totalDays)-1,totalDays};
+ }
+
+ function renderSumar(){
+   const rows=sumarRows(),current=rows.length?rows[rows.length-1].balance:0;
+   $('sumarCurrent').textContent=current?money(current):'—';
+   let gain=0;
+   for(let i=1;i<rows.length;i++){const d=intervalData(rows,i);if(d)gain+=d.gain}
+   $('sumarAccum').textContent=rows.length>1?'Ganancia acumulada ajustada: '+money(gain):'Registra al menos 2 puntos de control.';
+   $('sumarDaysCount').textContent=rows.length;
+   const m7=windowMetrics(rows,7),m15=windowMetrics(rows,15),m30=windowMetrics(rows,30);
+   $('sumarEA7').textContent=m7?pct(m7.ea):'—';
+   $('sumarEA15').textContent=m15?pct(m15.ea):'—';
+   $('sumarEA30').textContent=m30?pct(m30.ea):'—';
+
+   const body=$('sumarBody');
+   if(!rows.length){body.innerHTML='<tr><td colspan="7" style="text-align:center;color:#66717d">Todavía no hay puntos de control.</td></tr>'}
+   else{
+     body.innerHTML=rows.slice().reverse().map((v,rev)=>{
+       const idx=rows.length-1-rev,d=intervalData(rows,idx);
+       return `<tr><td>${formatDate(v.date)}${v.note?`<br><span style="font-size:10px;color:#8a949d">${escapeHtml(v.note)}</span>`:''}</td><td>${money(v.balance)}</td><td>${movementLabel(v)}</td><td>${d?d.days:'—'}</td><td>${d?money(d.gain):'—'}${v.reported!=null?`<br><span style="font-size:10px;color:#66717d">Sumar: ${money(v.reported)}</span>`:''}</td><td>${d?pct(d.ea):'—'}</td><td><button class="history-edit" data-sumar-edit="${idx}" title="Editar">✎</button> <button class="history-delete" data-sumar-delete="${idx}" title="Borrar">×</button></td></tr>`;
+     }).join('');
+   }
+
+   body.querySelectorAll('[data-sumar-edit]').forEach(btn=>btn.addEventListener('click',()=>{
+     const rows=sumarRows(),i=Number(btn.dataset.sumarEdit),r=rows[i];if(!r)return;
+     const b=prompt('Saldo final de Sumar:',String(Math.round(r.balance)));if(b===null)return;
+     const n=Number(String(b).replace(/\D/g,''));if(!n)return;
+     const mv=prompt('Movimiento: none, deposit o withdrawal',r.movement||'none');if(mv===null)return;
+     const movement=['none','deposit','withdrawal'].includes(mv)?mv:'none';
+     let amount=0;
+     if(movement!=='none'){const a=prompt('Valor del movimiento:',String(Math.round(r.movementAmount||0)));if(a===null)return;amount=Number(String(a).replace(/\D/g,''))}
+     const rep=prompt('Rendimiento informado por Sumar (opcional):',r.reported!=null?String(r.reported):'');
+     const reported=rep===null?r.reported:(rep.trim()?Number(rep.replace(/\./g,'').replace(',','.').replace(/[^\d.-]/g,'')):null);
+     const note=prompt('Nota (opcional):',r.note||'');
+     r.balance=n;r.movement=movement;r.movementAmount=amount;r.reported=Number.isFinite(reported)?reported:null;r.note=note===null?r.note:note.trim().slice(0,60);
+     saveSumarData(rows);renderSumar();
+   }));
+   body.querySelectorAll('[data-sumar-delete]').forEach(btn=>btn.addEventListener('click',()=>{
+     const rows=sumarRows(),i=Number(btn.dataset.sumarDelete);if(!rows[i])return;
+     if(confirm('¿Borrar este punto de control?')){rows.splice(i,1);saveSumarData(rows);renderSumar();}
+   }));
+   drawSumarChart();
+ }
+
+ function drawSumarChart(){
+   const c=$('sumarChart'),ctx=c.getContext('2d'),rows=sumarRows().slice(-30),w=c.width,h=c.height;ctx.clearRect(0,0,w,h);
+   if(rows.length<2){ctx.fillStyle='#66717d';ctx.font='14px Arial';ctx.textAlign='center';ctx.fillText('Registra al menos 2 puntos para ver el gráfico',w/2,h/2);return}
+   const pad={l:18,r:18,t:20,b:30},min=Math.min(...rows.map(x=>x.balance)),max=Math.max(...rows.map(x=>x.balance)),range=max-min||1,iw=w-pad.l-pad.r,ih=h-pad.t-pad.b;
+   ctx.strokeStyle='#dfe4e8';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pad.l,h-pad.b);ctx.lineTo(w-pad.r,h-pad.b);ctx.stroke();
+   ctx.beginPath();rows.forEach((r,i)=>{const x=pad.l+i*iw/(rows.length-1),y=pad.t+(max-r.balance)*ih/range;i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.strokeStyle='#0d3b34';ctx.lineWidth=3;ctx.stroke();
+   rows.forEach((r,i)=>{const x=pad.l+i*iw/(rows.length-1),y=pad.t+(max-r.balance)*ih/range;ctx.fillStyle='#d4af37';ctx.beginPath();ctx.arc(x,y,4,0,Math.PI*2);ctx.fill()});
+   ctx.fillStyle='#66717d';ctx.font='10px Arial';ctx.textAlign='left';ctx.fillText(formatDate(rows[0].date),pad.l,h-10);ctx.textAlign='right';ctx.fillText(formatDate(rows[rows.length-1].date),w-pad.r,h-10);
+ }
+ function setSumarToday(){$('sumarDate').value=localDateString(new Date())}
+
  const HISTORY_KEY='simulador_fic_cdt_historial_v1';
  function getHistory(){try{return JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]')}catch(e){return[]}}
  function saveHistoryItem(){
@@ -273,25 +463,10 @@ th{font-size:11px;color:#66717d}
    try{localStorage.setItem(HISTORY_KEY,JSON.stringify(h))}catch(e){}
    renderHistory();
  }
- function escapeHtml(text){
-   return String(text).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
- }
- function editHistoryDescription(i){
-   const h=getHistory(), item=h[i];
-   if(!item) return;
-   const value=window.prompt('Descripción de esta inversión:', item.description || '');
-   if(value===null) return;
-   item.description=value.trim().slice(0,50);
-   try{localStorage.setItem(HISTORY_KEY,JSON.stringify(h))}catch(e){}
-   renderHistory();
- }
  function renderHistory(){
    const box=$('historyList'),h=getHistory();
    if(!h.length){box.innerHTML='<div class="history-empty">Todavía no hay simulaciones guardadas.</div>';return}
-   box.innerHTML=h.map((v,i)=>`<div class="history-item"><div class="history-main"><div class="history-title">${escapeHtml(v.description || 'Añadir descripción')}</div><div class="history-meta">${money(v.capital)} · ${(v.ea*100).toFixed(2)}% E.A. · ${v.days} días · ReteFuente ${(v.ret*100).toFixed(0)}% · ${v.date}</div></div><div class="history-result">${money(v.final)}<br><span style="font-size:12px;color:#66717d">+${money(v.net)}</span></div><button class="edit-history" type="button" data-history-index="${i}" aria-label="Editar descripción">✎</button><button class="delete-history" type="button" data-history-index="${i}" aria-label="Borrar esta simulación">×</button></div>`).join('');
-   box.querySelectorAll('.edit-history').forEach(btn=>btn.addEventListener('click',()=>{
-     editHistoryDescription(Number(btn.dataset.historyIndex));
-   }));
+   box.innerHTML=h.map((v,i)=>`<div class="history-item"><div class="history-main"><div class="history-title">${money(v.capital)} · ${(v.ea*100).toFixed(2)}% E.A.</div><div class="history-meta">${v.days} días · ${v.date} · ReteFuente ${(v.ret*100).toFixed(0)}%</div></div><div class="history-result">${money(v.final)}<br><span style="font-size:12px;color:#66717d">+${money(v.net)}</span></div><button class="delete-history" type="button" data-history-index="${i}" aria-label="Borrar esta simulación">×</button></div>`).join('');
    box.querySelectorAll('.delete-history').forEach(btn=>btn.addEventListener('click',()=>{
      const i=Number(btn.dataset.historyIndex); let items=getHistory(); items.splice(i,1);
      try{localStorage.setItem(HISTORY_KEY,JSON.stringify(items))}catch(e){}
@@ -360,8 +535,36 @@ th{font-size:11px;color:#66717d}
  renderHistory();
  loadValues();
  formatCapital();
+
  calculate();
+
+
+
+ setSumarToday();
+ $('sumarBalance').addEventListener('input',()=>formatMoneyInput('sumarBalance'));
+ $('sumarMovementAmount').addEventListener('input',()=>formatMoneyInput('sumarMovementAmount'));
+ $('sumarMovement').addEventListener('change',()=>{
+   $('sumarMovementAmount').disabled=$('sumarMovement').value==='none';
+   if($('sumarMovement').value==='none')$('sumarMovementAmount').value='';
+ });
+ $('saveSumar').addEventListener('click',()=>{
+   const err=$('sumarError'),date=$('sumarDate').value,balance=parseMoneyInput('sumarBalance'),movement=$('sumarMovement').value,movementAmount=parseMoneyInput('sumarMovementAmount'),reportedText=$('sumarReported').value.trim(),reported=reportedText?parseDecimalMoney('sumarReported'):null,note=$('sumarNote').value.trim().slice(0,60);
+   if(!date){err.textContent='Selecciona una fecha.';return}
+   if(!balance||balance<=0){err.textContent='Ingresa un saldo final mayor que cero.';return}
+   if(movement!=='none'&&(!movementAmount||movementAmount<=0)){err.textContent='Ingresa el valor del aporte o retiro.';return}
+   if(reportedText&&(!Number.isFinite(reported)||reported<0)){err.textContent='Revisa el rendimiento informado.';return}
+   err.textContent='';
+   let rows=getSumar(),i=rows.findIndex(x=>x.date===date);
+   const item={date,balance,movement,movementAmount:movement==='none'?0:movementAmount,reported:Number.isFinite(reported)?reported:null,note};
+   if(i>=0)rows[i]=item;else rows.push(item);
+   rows.sort((a,b)=>a.date.localeCompare(b.date));saveSumarData(rows);renderSumar();
+   $('sumarBalance').value='';$('sumarMovementAmount').value='';$('sumarReported').value='';$('sumarNote').value='';$('sumarMovement').value='none';$('sumarMovementAmount').disabled=true;
+ });
+ $('clearSumar').addEventListener('click',()=>{if(confirm('¿Borrar todos los puntos de control de Sumar?')){localStorage.removeItem(SUMAR_KEY);renderSumar();}});
+ $('sumarMovementAmount').disabled=true;
+ renderSumar();
 })();
+
 </script>
 </body>
 </html>
