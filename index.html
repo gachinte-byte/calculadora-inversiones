@@ -450,49 +450,77 @@ function sCalc(a){
  sNormalize(a);
  a.rows.sort((x,y)=>String(x.date).localeCompare(String(y.date)));
 
- // Repeat a few passes so several consecutive missing balances can be rebuilt.
- for(let pass=0;pass<6;pass++){
+ /*
+  Reconstrucción de días anteriores:
+  1) Si existe un saldo conocido antes y el día siguiente tiene rendimiento
+     reportado, calcula el saldo siguiente.
+  2) Si existe un saldo conocido después y el día anterior tiene rendimiento
+     reportado, calcula el saldo anterior.
+  3) Repite varias pasadas para poder reconstruir una cadena completa.
+  4) Los saldos introducidos por el usuario nunca se reemplazan.
+ */
+ for(let pass=0;pass<20;pass++){
    let changed=false;
 
-   // Forward: previous known balance + current day's movement + current day's
-   // bank-reported yield = current balance.
+   // Hacia adelante.
    for(let i=1;i<a.rows.length;i++){
-     const p=a.rows[i-1],r=a.rows[i];
-     if(p.balance==null||r.balance!=null||r.bankGain==null||sDays(p.date,r.date)!==1)continue;
-     let b=Number(p.balance);
-     if(r.movementType==='aporte')b+=Number(r.movementAmount||0);
-     if(r.movementType==='retiro')b-=Number(r.movementAmount||0);
-     b+=Number(r.bankGain||0);
-     if(Number.isFinite(b)){r.balance=b;r.reconstructed=true;changed=true}
+     const prev=a.rows[i-1],cur=a.rows[i];
+     if(prev.balance==null||cur.balance!=null||cur.bankGain==null)continue;
+     if(sDays(prev.date,cur.date)!==1)continue;
+
+     let b=Number(prev.balance);
+     if(cur.movementType==='aporte')b+=Number(cur.movementAmount||0);
+     if(cur.movementType==='retiro')b-=Number(cur.movementAmount||0);
+     b+=Number(cur.bankGain||0);
+
+     if(Number.isFinite(b)){
+       cur.balance=b;
+       cur.reconstructed=true;
+       changed=true;
+     }
    }
 
-   // Backward: current known balance - current day's yield - current day's
-   // movement = previous balance.
+   // Hacia atrás.
    for(let i=a.rows.length-1;i>0;i--){
-     const p=a.rows[i-1],r=a.rows[i];
-     if(r.balance==null||p.balance!=null||r.bankGain==null||sDays(p.date,r.date)!==1)continue;
-     let b=Number(r.balance);
-     if(r.movementType==='aporte')b-=Number(r.movementAmount||0);
-     if(r.movementType==='retiro')b+=Number(r.movementAmount||0);
-     b-=Number(r.bankGain||0);
-     if(Number.isFinite(b)){p.balance=b;p.reconstructed=true;changed=true}
+     const prev=a.rows[i-1],cur=a.rows[i];
+     if(cur.balance==null||prev.balance!=null||cur.bankGain==null)continue;
+     if(sDays(prev.date,cur.date)!==1)continue;
+
+     let b=Number(cur.balance);
+     if(cur.movementType==='aporte')b-=Number(cur.movementAmount||0);
+     if(cur.movementType==='retiro')b+=Number(cur.movementAmount||0);
+     b-=Number(cur.bankGain||0);
+
+     if(Number.isFinite(b)){
+       prev.balance=b;
+       prev.reconstructed=true;
+       changed=true;
+     }
    }
+
    if(!changed)break;
  }
 
- // Calculate daily E.A. only from bank-reported yield and a known prior capital.
+ // E.A. diario a partir del rendimiento real reportado por el banco.
  a.rows.forEach((r,i)=>{
-   r.days=null;r.calcGain=null;r.ea=null;
+   r.days=null;
+   r.calcGain=null;
+   r.ea=null;
    if(i===0)return;
-   const p=a.rows[i-1],d=sDays(p.date,r.date);
+
+   const prev=a.rows[i-1];
+   const d=sDays(prev.date,r.date);
    r.days=d;
-   if(p.balance!=null&&r.balance!=null){
-     r.calcGain=Number(r.balance)-Number(p.balance)
+
+   if(prev.balance!=null&&r.balance!=null){
+     r.calcGain=Number(r.balance)-Number(prev.balance)
        -(r.movementType==='aporte'?Number(r.movementAmount||0):0)
        +(r.movementType==='retiro'?Number(r.movementAmount||0):0);
    }
-   if(r.bankGain!=null&&p.balance!=null&&d>0){
-     const base=sBase(p,r),gain=Number(r.bankGain);
+
+   if(r.bankGain!=null&&prev.balance!=null&&d>0){
+     const base=sBase(prev,r);
+     const gain=Number(r.bankGain);
      if(base>0&&1+gain/base>0){
        r.ea=sEA(Math.pow(1+gain/base,1/d)-1);
      }
