@@ -654,22 +654,6 @@ const HISTORY_KEY='simulador_fic_cdt_historial_v1';
      renderHistory();
    }));
  }
- 
-  sumarLoadAccounts();
-  renderSumarAccounts();
-  $('sumarCurrentDate').value=sumarDateNow(new Date());
-  $('sumarAccountSelect').addEventListener('change',()=>{
-    sumarSelectedId=$('sumarAccountSelect').value;
-    renderSumarAccountSummary();renderSumarDaily();renderSumarPeriod();renderSavedSumarHistory();
-  });
-  $('sumarAddAccount').addEventListener('click',addSumarAccount);
-  $('sumarRenameAccount').addEventListener('click',renameSumarAccount);
-  $('sumarDeleteAccount').addEventListener('click',deleteSumarAccount);
-  $('sumarCurrentBalance').addEventListener('input',()=>sumarFormatMoney('sumarCurrentBalance'));
-  $('saveSumarDaily').addEventListener('click',saveSumarDaily);
-  $('saveSumarTramo').addEventListener('click',saveSumarTramo);
-  renderSumarDaily();renderSumarPeriod();renderSavedSumarHistory();
-
   function resetForm(){
    $('capital').value='1.000.000'; $('ea').value='10'; $('days').value='30'; $('ret').value='4';
    formatCapital(); calculate();
