@@ -184,7 +184,9 @@ th{font-size:11px;color:#66717d}
       <div class="sumar-account-actions">
         <button class="secondary" id="sumarAddAccount" type="button">+ AGREGAR</button>
         <button class="secondary" id="sumarRenameAccount" type="button">RENOMBRAR</button>
-        <button class="secondary" id="sumarDeleteAccount" type="button">ELIMINAR</button>
+        <button class="secondary" id="sumarExportData" type="button">EXPORTAR DATOS</button>
+      <button class="secondary" id="sumarImportData" type="button">IMPORTAR DATOS</button>
+      <input id="sumarImportFile" type="file" accept="application/json" style="display:none"><button class="secondary" id="sumarDeleteAccount" type="button">ELIMINAR</button>
       </div>
     </div>
     <div class="sumar-summary-grid">
@@ -383,12 +385,54 @@ th{font-size:11px;color:#66717d}
  
 /* ================= SUMAR · CUENTAS · V12 ================= */
 const SUMAR_KEY='gaachinte_sumar_cuentas_v12';
+const SUMAR_OLD_KEYS=['gaachinte_sumar_cuentas_v11','gaachinte_sumar_cuentas'];
 const SUMAR_TRAMOS_KEY='gaachinte_sumar_tramos_v12';
+const SUMAR_OLD_TRAMOS_KEYS=['gaachinte_sumar_tramos_v11','gaachinte_sumar_tramos'];
 let sumarAccounts=[],sumarSelectedId=null;
-function sLoad(){try{sumarAccounts=JSON.parse(localStorage.getItem(SUMAR_KEY)||'[]')}catch(e){sumarAccounts=[]}if(!Array.isArray(sumarAccounts)||!sumarAccounts.length){sumarAccounts=[{id:'default',name:'Sumar principal',rows:[]}];sumarSelectedId='default';sSave()}if(!sumarSelectedId||!sumarAccounts.some(a=>a.id===sumarSelectedId))sumarSelectedId=sumarAccounts[0].id}
+function sLoad(){
+ try{
+   let raw=localStorage.getItem(SUMAR_KEY);
+   if(!raw){
+     for(const k of SUMAR_OLD_KEYS){
+       const old=localStorage.getItem(k);
+       if(old){raw=old;break}
+     }
+     if(raw){try{localStorage.setItem(SUMAR_KEY,raw)}catch(e){}}
+   }
+   sumarAccounts=raw?JSON.parse(raw):[];
+   if(!Array.isArray(sumarAccounts))sumarAccounts=[];
+ }catch(e){
+   sumarAccounts=[];
+ }
+ sumarAccounts=sumarAccounts.filter(a=>a&&typeof a==='object'&&Array.isArray(a.rows));
+ if(!sumarAccounts.length){
+   sumarAccounts=[{id:'default',name:'Sumar principal',rows:[]}];
+   sumarSelectedId='default';
+   sSave();
+ }else if(!sumarSelectedId||!sumarAccounts.some(a=>a.id===sumarSelectedId)){
+   sumarSelectedId=sumarAccounts[0].id;
+ }
+ sumarAccounts.forEach(a=>{
+   a.name=String(a.name||'Cuenta Sumar');
+   a.rows=a.rows.filter(r=>r&&typeof r==='object'&&r.date);
+ });
+}
 function sSave(){try{localStorage.setItem(SUMAR_KEY,JSON.stringify(sumarAccounts))}catch(e){}}
 function sAcc(){return sumarAccounts.find(a=>a.id===sumarSelectedId)||null}
-function sTramos(){try{const x=JSON.parse(localStorage.getItem(SUMAR_TRAMOS_KEY)||'[]');return Array.isArray(x)?x:[]}catch(e){return[]}}
+function sTramos(){
+ try{
+   let raw=localStorage.getItem(SUMAR_TRAMOS_KEY);
+   if(!raw){
+     for(const k of SUMAR_OLD_TRAMOS_KEYS){
+       const old=localStorage.getItem(k);
+       if(old){raw=old;break}
+     }
+     if(raw){try{localStorage.setItem(SUMAR_TRAMOS_KEY,raw)}catch(e){}}
+   }
+   const x=raw?JSON.parse(raw):[];
+   return Array.isArray(x)?x.filter(r=>r&&typeof r==='object'):[];
+ }catch(e){return[]}
+}
 function sTramosSave(x){try{localStorage.setItem(SUMAR_TRAMOS_KEY,JSON.stringify(x))}catch(e){}}
 function sMoney(id){const e=$(id),raw=e?e.value.replace(/\D/g,''):'';return raw?Number(raw):0}
 function sFmt(id){const n=sMoney(id);$(id).value=n?new Intl.NumberFormat('es-CO',{maximumFractionDigits:0}).format(n):''}
@@ -402,12 +446,60 @@ function sP(n){return new Intl.NumberFormat('es-CO',{minimumFractionDigits:2,max
 function sBase(prev,r){const m=Number(r.movementAmount)||0;return Number(prev.balance)+(r.movementType==='aporte'?m:0)-(r.movementType==='retiro'?m:0)}
 function sNormalize(a){a.rows.forEach(r=>{r.movementType=r.movementType||'none';r.movementAmount=Number(r.movementAmount)||0;r.bankGain=(r.bankGain==null||r.bankGain==='')?null:Number(r.bankGain);r.balance=(r.balance==null||r.balance==='')?null:Number(r.balance);r.reconstructed=false})}
 function sCalc(a){
- if(!a||!Array.isArray(a.rows))return;sNormalize(a);a.rows.sort((x,y)=>String(x.date).localeCompare(String(y.date)));
- // Forward: known balance + daily bank yield + movement = reconstructed balance.
- for(let i=1;i<a.rows.length;i++){const p=a.rows[i-1],r=a.rows[i];if(r.balance!=null||p.balance==null||sDays(p.date,r.date)!==1||r.bankGain==null)continue;let b=Number(p.balance);if(r.movementType==='aporte')b+=r.movementAmount;if(r.movementType==='retiro')b-=r.movementAmount;b+=r.bankGain;r.balance=b;r.reconstructed=true}
- // Backward: later real balance - daily bank yield - movement = reconstructed previous balance.
- for(let i=a.rows.length-1;i>0;i--){const r=a.rows[i],p=a.rows[i-1];if(r.balance==null||p.balance!=null||sDays(p.date,r.date)!==1||p.bankGain==null)continue;let b=Number(r.balance);if(p.movementType==='aporte')b-=p.movementAmount;if(p.movementType==='retiro')b+=p.movementAmount;b-=p.bankGain;p.balance=b;p.reconstructed=true}
- a.rows.forEach((r,i)=>{r.days=null;r.calcGain=null;r.ea=null;if(i===0){if(r.balance!=null&&r.bankGain!=null&&r.balance>0)r.ea=sEA(r.bankGain/r.balance);return}const p=a.rows[i-1],d=sDays(p.date,r.date);r.days=d;if(p.balance==null||r.balance==null)return;const base=sBase(p,r);r.calcGain=Number(r.balance)-Number(p.balance)-(r.movementType==='aporte'?r.movementAmount:0)+(r.movementType==='retiro'?r.movementAmount:0);const g=r.bankGain!=null?r.bankGain:(r.movementType==='none'?r.calcGain:null);if(g!=null&&base>0&&1+g/base>0)r.ea=sEA(Math.pow(1+g/base,1/d)-1)})}
+ if(!a||!Array.isArray(a.rows))return;
+ sNormalize(a);
+ a.rows.sort((x,y)=>String(x.date).localeCompare(String(y.date)));
+
+ // Repeat a few passes so several consecutive missing balances can be rebuilt.
+ for(let pass=0;pass<6;pass++){
+   let changed=false;
+
+   // Forward: previous known balance + current day's movement + current day's
+   // bank-reported yield = current balance.
+   for(let i=1;i<a.rows.length;i++){
+     const p=a.rows[i-1],r=a.rows[i];
+     if(p.balance==null||r.balance!=null||r.bankGain==null||sDays(p.date,r.date)!==1)continue;
+     let b=Number(p.balance);
+     if(r.movementType==='aporte')b+=Number(r.movementAmount||0);
+     if(r.movementType==='retiro')b-=Number(r.movementAmount||0);
+     b+=Number(r.bankGain||0);
+     if(Number.isFinite(b)){r.balance=b;r.reconstructed=true;changed=true}
+   }
+
+   // Backward: current known balance - current day's yield - current day's
+   // movement = previous balance.
+   for(let i=a.rows.length-1;i>0;i--){
+     const p=a.rows[i-1],r=a.rows[i];
+     if(r.balance==null||p.balance!=null||r.bankGain==null||sDays(p.date,r.date)!==1)continue;
+     let b=Number(r.balance);
+     if(r.movementType==='aporte')b-=Number(r.movementAmount||0);
+     if(r.movementType==='retiro')b+=Number(r.movementAmount||0);
+     b-=Number(r.bankGain||0);
+     if(Number.isFinite(b)){p.balance=b;p.reconstructed=true;changed=true}
+   }
+   if(!changed)break;
+ }
+
+ // Calculate daily E.A. only from bank-reported yield and a known prior capital.
+ a.rows.forEach((r,i)=>{
+   r.days=null;r.calcGain=null;r.ea=null;
+   if(i===0)return;
+   const p=a.rows[i-1],d=sDays(p.date,r.date);
+   r.days=d;
+   if(p.balance!=null&&r.balance!=null){
+     r.calcGain=Number(r.balance)-Number(p.balance)
+       -(r.movementType==='aporte'?Number(r.movementAmount||0):0)
+       +(r.movementType==='retiro'?Number(r.movementAmount||0):0);
+   }
+   if(r.bankGain!=null&&p.balance!=null&&d>0){
+     const base=sBase(p,r),gain=Number(r.bankGain);
+     if(base>0&&1+gain/base>0){
+       r.ea=sEA(Math.pow(1+gain/base,1/d)-1);
+     }
+   }
+ });
+}
+
 function sRenderAccounts(){const e=$('sumarAccountSelect');e.innerHTML='';sumarAccounts.forEach(a=>{const o=document.createElement('option');o.value=a.id;o.textContent=a.name;e.appendChild(o)});e.value=sumarSelectedId}
 function sRender(){
  const a=sAcc(),rows=(a&&a.rows?a.rows:[]).slice().sort((x,y)=>String(x.date).localeCompare(String(y.date)));
@@ -535,6 +627,44 @@ function sSummary(){
    ' Los días sin rendimiento bancario se estiman por tramo y no sustituyen los datos del banco.';
 }
 function sSaveDaily(){const a=sAcc(),date=$('sumarCurrentDate').value,balance=$('sumarCurrentBalance').value.trim()?sMoney('sumarCurrentBalance'):null,type=$('sumarMovementType').value,amount=type==='none'?0:sMoney('sumarMovementAmount'),bank=$('sumarBankYield').value.trim()?sYield('sumarBankYield'):null;if(!a||!date){$('sumarError').textContent='Ingresa la fecha.';return}if(balance==null&&bank==null&&type==='none'){$('sumarError').textContent='Ingresa al menos el saldo o el rendimiento del banco.';return}if(type!=='none'&&!amount){$('sumarError').textContent='Ingresa el valor del aporte o retiro.';return}const old=a.rows.find(r=>r.date===date);if(old){if(!confirm('Ya existe un registro para '+sDF(date)+'. ¿Reemplazarlo?'))return;old.balance=balance;old.movementType=type;old.movementAmount=amount;old.bankGain=bank}else a.rows.push({id:Date.now(),date,balance,movementType:type,movementAmount:amount,bankGain:bank});sCalc(a);sSave();sRender();sSummary();sChart();sTramoRender();$('sumarCurrentBalance').value='';$('sumarMovementAmount').value='';$('sumarBankYield').value='';$('sumarMovementType').value='none';$('sumarMovementWrap').style.display='none';$('sumarError').textContent=''}
+function sExportData(){
+ const payload={
+   version:13,
+   exportedAt:new Date().toISOString(),
+   accounts:sumarAccounts,
+   tramos:sTramos()
+ };
+ const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+ const url=URL.createObjectURL(blob),a=document.createElement('a');
+ a.href=url;a.download='gaachinte-finanzas-respaldo.json';a.click();
+ setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function sImportData(file){
+ const reader=new FileReader();
+ reader.onload=()=>{
+   try{
+     const data=JSON.parse(reader.result);
+     if(!data||!Array.isArray(data.accounts))throw new Error('Formato');
+     const cleaned=data.accounts.filter(a=>a&&Array.isArray(a.rows)).map(a=>({
+       id:String(a.id||('acc_'+Date.now()+Math.random())),
+       name:String(a.name||'Cuenta Sumar'),
+       rows:a.rows.filter(r=>r&&r.date)
+     }));
+     if(!cleaned.length)throw new Error('Sin cuentas');
+     if(!confirm('¿Reemplazar los datos de Sumar de este dispositivo por el respaldo seleccionado?'))return;
+     sumarAccounts=cleaned;
+     sumarSelectedId=sumarAccounts[0].id;
+     sSave();
+     if(Array.isArray(data.tramos))sTramosSave(data.tramos);
+     sumarAccounts.forEach(a=>{try{sCalc(a)}catch(e){}});
+     sRenderAccounts();sRender();sSummary();sChart();sTramoRender();
+     $('sumarError').textContent='Respaldo cargado correctamente.';
+   }catch(e){
+     $('sumarError').textContent='No se pudo importar el respaldo.';
+   }
+ };
+ reader.readAsText(file);
+}
 function sAdd(){const name=prompt('Nombre de la nueva cuenta o inversión:','Banco de Bogotá – Sumar');if(!name||!name.trim())return;sumarSelectedId='acc_'+Date.now();sumarAccounts.push({id:sumarSelectedId,name:name.trim(),rows:[]});sSave();sRenderAccounts();sRender();sSummary();sChart();sTramoRender()}
 function sRename(){const a=sAcc();if(!a)return;const name=prompt('Nuevo nombre:',a.name);if(!name||!name.trim())return;a.name=name.trim();sSave();sRenderAccounts();sTramoRender()}
 function sDelete(){if(sumarAccounts.length===1){alert('Debes conservar al menos una cuenta.');return}const a=sAcc();if(a&&confirm('¿Eliminar "'+a.name+'" y todos sus registros?')){sumarAccounts=sumarAccounts.filter(x=>x.id!==a.id);sumarSelectedId=sumarAccounts[0].id;sSave();sRenderAccounts();sRender();sSummary();sChart();sTramoRender()}}
@@ -675,7 +805,7 @@ function sClearAccount(){
 }
 
 function sChart(){const c=$('sumarChart'),note=$('sumarChartNote'),a=sAcc();if(!c||!note)return;const rows=(a&&a.rows?a.rows:[]).slice().sort((x,y)=>String(x.date).localeCompare(String(y.date))),plotted=rows.filter(r=>r.balance!=null),ctx=c.getContext('2d'),dpr=window.devicePixelRatio||1,rect=c.getBoundingClientRect(),w=Math.max(320,rect.width),h=Math.max(220,rect.height);c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);if(!plotted.length){note.textContent='Aún no hay saldos para graficar.';ctx.font='14px Arial';ctx.fillStyle='#697586';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('Sin datos todavía',w/2,h/2);return}note.textContent=plotted.length+' saldo'+(plotted.length===1?'':'s')+' disponible'+(plotted.length===1?'':'s')+' · '+a.name;const vals=plotted.map(r=>Number(r.balance)||0),mn=Math.min(...vals),mx=Math.max(...vals),rg=Math.max(1,mx-mn),pad={l:78,r:18,t:22,b:48},pw=w-pad.l-pad.r,ph=h-pad.t-pad.b,y0=mn-rg*.12,y1=mx+rg*.12,X=i=>plotted.length===1?pad.l+pw/2:pad.l+i/(plotted.length-1)*pw,Y=v=>pad.t+(1-(v-y0)/(y1-y0))*ph;ctx.font='11px Arial';ctx.textBaseline='middle';ctx.textAlign='right';for(let i=0;i<=4;i++){const v=y0+(y1-y0)*i/4,yy=Y(v);ctx.strokeStyle='#e8edf2';ctx.beginPath();ctx.moveTo(pad.l,yy);ctx.lineTo(w-pad.r,yy);ctx.stroke();ctx.fillStyle='#697586';ctx.fillText(money(v),pad.l-8,yy)}ctx.strokeStyle='#d8dee5';ctx.beginPath();ctx.moveTo(pad.l,pad.t);ctx.lineTo(pad.l,h-pad.b);ctx.lineTo(w-pad.r,h-pad.b);ctx.stroke();ctx.strokeStyle='#0b4fb3';ctx.lineWidth=2.5;ctx.beginPath();plotted.forEach((r,i)=>{const xx=X(i),yy=Y(r.balance);i?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy)});ctx.stroke();plotted.forEach((r,i)=>{const xx=X(i),yy=Y(r.balance);ctx.fillStyle='#fff';ctx.strokeStyle='#0b4fb3';ctx.lineWidth=2;ctx.beginPath();ctx.arc(xx,yy,4,0,Math.PI*2);ctx.fill();ctx.stroke()});ctx.font='11px Arial';ctx.fillStyle='#697586';ctx.textAlign='center';ctx.textBaseline='top';const step=plotted.length<=8?1:Math.ceil(plotted.length/8);plotted.forEach((r,i)=>{if(i===0||i===plotted.length-1||i%step===0)ctx.fillText(sDF(r.date),X(i),h-pad.b+12)})}
-sLoad();sRenderAccounts();$('sumarCurrentDate').value=sDate(new Date());$('sumarAccountSelect').addEventListener('change',()=>{sumarSelectedId=$('sumarAccountSelect').value;sRender();sSummary();sChart();sTramoRender()});$('sumarAddAccount').addEventListener('click',sAdd);$('sumarRenameAccount').addEventListener('click',sRename);$('sumarDeleteAccount').addEventListener('click',sDelete);$('sumarCurrentBalance').addEventListener('input',()=>sFmt('sumarCurrentBalance'));$('sumarMovementAmount').addEventListener('input',()=>sFmt('sumarMovementAmount'));$('sumarMovementType').addEventListener('change',()=>{$('sumarMovementWrap').style.display=$('sumarMovementType').value==='none'?'none':'block';if($('sumarMovementType').value==='none')$('sumarMovementAmount').value=''});$('saveSumarDaily').addEventListener('click',sSaveDaily);$('saveSumarTramo').addEventListener('click',sTramoSave);$('clearSumarAccount').addEventListener('click',sClearAccount);sRender();sSummary();sChart();sTramoRender();window.addEventListener('resize',sChart);
+sLoad();sumarAccounts.forEach(a=>{try{sCalc(a)}catch(e){}});sRenderAccounts();$('sumarCurrentDate').value=sDate(new Date());$('sumarAccountSelect').addEventListener('change',()=>{sumarSelectedId=$('sumarAccountSelect').value;sRender();sSummary();sChart();sTramoRender()});$('sumarAddAccount').addEventListener('click',sAdd);$('sumarRenameAccount').addEventListener('click',sRename);$('sumarDeleteAccount').addEventListener('click',sDelete);$('sumarCurrentBalance').addEventListener('input',()=>sFmt('sumarCurrentBalance'));$('sumarMovementAmount').addEventListener('input',()=>sFmt('sumarMovementAmount'));$('sumarMovementType').addEventListener('change',()=>{$('sumarMovementWrap').style.display=$('sumarMovementType').value==='none'?'none':'block';if($('sumarMovementType').value==='none')$('sumarMovementAmount').value=''});$('saveSumarDaily').addEventListener('click',sSaveDaily);$('saveSumarTramo').addEventListener('click',sTramoSave);$('sumarExportData')?.addEventListener('click',sExportData);$('sumarImportData')?.addEventListener('click',()=>$('sumarImportFile').click());$('sumarImportFile')?.addEventListener('change',e=>{if(e.target.files[0])sImportData(e.target.files[0]);e.target.value=''});$('clearSumarAccount').addEventListener('click',sClearAccount);sRender();sSummary();sChart();sTramoRender();window.addEventListener('resize',sChart);
 /* ================= FIN SUMAR V12 ================= */
 const HISTORY_KEY='simulador_fic_cdt_historial_v1';
  function getHistory(){try{return JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]')}catch(e){return[]}}
