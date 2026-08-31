@@ -263,7 +263,10 @@ th{font-size:11px;color:#66717d}
   <div class="card">
     <h3 style="margin-top:0">Historial de tramos</h3>
     <div class="small" style="margin-bottom:12px">Guarda el período actual para consultarlo después.</div>
-    <button class="primary" id="saveSumarTramo" type="button">GUARDAR TRAMO ACTUAL</button>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="primary" id="saveSumarTramo" type="button">GUARDAR TRAMO ACTUAL</button>
+      <button class="secondary" id="clearSumarAccount" type="button">LIMPIAR HISTORIAL DE LA CUENTA</button>
+    </div>
     <div id="sumarSavedHistory" style="margin-top:12px"></div>
   </div>
 </section>
@@ -535,10 +538,144 @@ function sSaveDaily(){const a=sAcc(),date=$('sumarCurrentDate').value,balance=$(
 function sAdd(){const name=prompt('Nombre de la nueva cuenta o inversión:','Banco de Bogotá – Sumar');if(!name||!name.trim())return;sumarSelectedId='acc_'+Date.now();sumarAccounts.push({id:sumarSelectedId,name:name.trim(),rows:[]});sSave();sRenderAccounts();sRender();sSummary();sChart();sTramoRender()}
 function sRename(){const a=sAcc();if(!a)return;const name=prompt('Nuevo nombre:',a.name);if(!name||!name.trim())return;a.name=name.trim();sSave();sRenderAccounts();sTramoRender()}
 function sDelete(){if(sumarAccounts.length===1){alert('Debes conservar al menos una cuenta.');return}const a=sAcc();if(a&&confirm('¿Eliminar "'+a.name+'" y todos sus registros?')){sumarAccounts=sumarAccounts.filter(x=>x.id!==a.id);sumarSelectedId=sumarAccounts[0].id;sSave();sRenderAccounts();sRender();sSummary();sChart();sTramoRender()}}
-function sTramoSave(){const a=sAcc(),rows=(a&&a.rows?a.rows:[]).slice().sort((x,y)=>String(x.date).localeCompare(String(y.date))),valid=rows.filter(r=>r.balance!=null);if(!a||valid.length<2){$('sumarError').textContent='Necesitas al menos dos saldos conocidos para guardar un tramo.';return}const first=valid[0],last=valid[valid.length-1],days=sDays(first.date,last.date),br=rows.filter(r=>r.bankGain!=null);let gain=br.reduce((t,r)=>t+Number(r.bankGain),0),log=0,total=0;for(const r of br){const i=rows.indexOf(r),p=i>0?rows[i-1]:null,base=p?sBase(p,r):Number(r.balance),d=p?(r.days||1):1;if(base>0&&1+Number(r.bankGain)/base>0){log+=Math.log(1+Number(r.bankGain)/base)*d;total+=d}}const rate=total?Math.exp(log/total)-1:0;const h=sTramos();h.push({id:Date.now(),accountId:a.id,accountName:a.name,startDate:first.date,endDate:last.date,startBalance:first.balance,endBalance:last.balance,days,gain,avg:total?gain/total:0,ea:total?sEA(rate):0});sTramosSave(h);sTramoRender()}
-function sTramoRender(){const box=$('sumarSavedHistory'),a=sAcc(),h=sTramos().filter(x=>a&&x.accountId===a.id).reverse();if(!h.length){box.innerHTML='<div class="history-empty">No hay tramos guardados para esta cuenta.</div>';return}box.innerHTML=h.map(r=>'<div class="saved-sumar"><div class="section-head"><div><strong>'+sDF(r.startDate)+' → '+sDF(r.endDate)+'</strong><div class="small">'+r.days+' días · '+money(r.startBalance)+' → '+money(r.endBalance)+'</div></div><button class="delete-history" data-stramo="'+r.id+'">×</button></div><div class="small" style="margin-top:7px">Rendimiento banco: <strong>'+money(r.gain)+'</strong> · Promedio diario: <strong>'+sM2(r.avg)+'</strong> · Rentabilidad E.A.: <strong>'+sP(r.ea)+'</strong></div></div>').join('');box.querySelectorAll('[data-stramo]').forEach(b=>b.addEventListener('click',()=>{const id=Number(b.dataset.stramo),x=sTramos();if(confirm('¿Eliminar este tramo?')){sTramosSave(x.filter(r=>Number(r.id)!==id));sTramoRender()}}))}
+function sTramoSave(){
+ const a=sAcc();
+ const rows=(a&&a.rows?a.rows:[]).slice().sort((x,y)=>String(x.date).localeCompare(String(y.date)));
+ const valid=rows.filter(r=>r.balance!=null);
+ if(!a||valid.length<2){
+   $('sumarError').textContent='Necesitas al menos dos saldos conocidos para guardar un tramo.';
+   return;
+ }
+
+ const first=valid[0],last=valid[valid.length-1],days=sDays(first.date,last.date);
+
+ // El resumen del tramo usa SIEMPRE los saldos extremos y los movimientos.
+ // Los rendimientos bancarios diarios quedan guardados como detalle real.
+ let netMov=0;
+ rows.forEach((r,i)=>{
+   if(i===0)return;
+   if(r.movementType==='aporte')netMov+=Number(r.movementAmount||0);
+   if(r.movementType==='retiro')netMov-=Number(r.movementAmount||0);
+ });
+ const gain=Number(last.balance)-Number(first.balance)-netMov;
+ const avg=days>0?gain/days:null;
+
+ // E.A. del tramo. Si hubo movimientos, es una aproximación ajustada al
+ // movimiento neto; la etiqueta lo deja claro en el historial guardado.
+ let ea=null;
+ const base=Number(first.balance)+Math.max(0,netMov);
+ const ending=Number(last.balance);
+ if(base>0&&ending>0){
+   const ratio=ending/base;
+   if(ratio>0)ea=Math.pow(ratio,365/days)-1;
+ }
+
+ // Guardamos una copia completa del tramo para poder consultarlo después
+ // aunque el usuario limpie la tabla actual de la cuenta.
+ const snapshot=rows.map(r=>({
+   date:r.date,
+   days:r.days||null,
+   balance:r.balance==null?null:Number(r.balance),
+   reconstructed:!!r.reconstructed,
+   movementType:r.movementType||'none',
+   movementAmount:Number(r.movementAmount||0),
+   bankGain:r.bankGain==null?null:Number(r.bankGain),
+   ea:r.ea==null?null:Number(r.ea)
+ }));
+
+ const h=sTramos();
+ h.push({
+   id:Date.now(),
+   accountId:a.id,
+   accountName:a.name,
+   startDate:first.date,
+   endDate:last.date,
+   startBalance:Number(first.balance),
+   endBalance:Number(last.balance),
+   days,
+   gain,
+   avg,
+   ea,
+   netMov,
+   snapshot,
+   savedAt:new Date().toISOString()
+ });
+ sTramosSave(h);
+ sTramoRender();
+ $('sumarError').textContent='Tramo guardado correctamente. Puedes limpiarlo de la cuenta para comenzar un nuevo período.';
+}
+
+function sTramoRender(){
+ const box=$('sumarSavedHistory'),a=sAcc();
+ const h=sTramos().filter(x=>a&&x.accountId===a.id).reverse();
+ if(!h.length){
+   box.innerHTML='<div class="history-empty">No hay tramos guardados para esta cuenta.</div>';
+   return;
+ }
+
+ box.innerHTML=h.map(r=>{
+   const movTxt=r.netMov>0
+     ? 'Aportes netos: '+money(r.netMov)
+     : r.netMov<0 ? 'Retiros netos: '+money(Math.abs(r.netMov)) : 'Sin movimientos';
+   const detail=(r.snapshot||[]).map(x=>{
+     let mv='—';
+     if(x.movementType==='aporte')mv='Aporte '+money(x.movementAmount);
+     if(x.movementType==='retiro')mv='Retiro '+money(x.movementAmount);
+     const bal=x.balance==null?'—':money(x.balance)+(x.reconstructed?'<div class="small">estimado</div>':'');
+     const bg=x.bankGain==null?'—':sM2(x.bankGain);
+     const ea=x.ea==null?'—':sP(x.ea);
+     return '<tr><td>'+sDF(x.date)+'</td><td>'+((x.days||'—'))+'</td><td>'+bal+'</td><td>'+mv+'</td><td>'+bg+'</td><td>'+ea+'</td></tr>';
+   }).join('');
+
+   return '<div class="saved-sumar" style="margin-bottom:10px">'+
+     '<div class="section-head">'+
+       '<div><strong>'+sDF(r.startDate)+' → '+sDF(r.endDate)+'</strong>'+
+       '<div class="small">'+r.days+' días · '+money(r.startBalance)+' → '+money(r.endBalance)+'</div></div>'+
+       '<button class="delete-history" data-stramo="'+r.id+'">×</button>'+
+     '</div>'+
+     '<div class="small" style="margin-top:8px">'+movTxt+'</div>'+
+     '<div class="small" style="margin-top:6px">Rendimiento del período: <strong>'+money(r.gain)+'</strong> · Promedio diario: <strong>'+sM2(r.avg)+'</strong> · Rentabilidad E.A.: <strong>'+sP(r.ea)+'</strong></div>'+
+     '<button class="secondary" type="button" data-sdetail="'+r.id+'" style="margin-top:9px">VER DETALLE DEL TRAMO</button>'+
+     '<div id="sdetail_'+r.id+'" style="display:none;margin-top:10px;overflow:auto">'+
+       '<table style="min-width:700px;width:100%"><thead><tr><th>Fecha</th><th>Días</th><th>Saldo final</th><th>Movimiento</th><th>Rendimiento banco</th><th>E.A.</th></tr></thead><tbody>'+detail+'</tbody></table>'+
+     '</div>'+
+   '</div>';
+ }).join('');
+
+ box.querySelectorAll('[data-stramo]').forEach(b=>b.addEventListener('click',()=>{
+   const id=Number(b.dataset.stramo),x=sTramos();
+   if(confirm('¿Eliminar este tramo guardado?')){
+     sTramosSave(x.filter(r=>Number(r.id)!==id));
+     sTramoRender();
+   }
+ }));
+ box.querySelectorAll('[data-sdetail]').forEach(b=>b.addEventListener('click',()=>{
+   const id=b.dataset.sdetail,el=$('sdetail_'+id);
+   if(!el)return;
+   const show=el.style.display==='none';
+   el.style.display=show?'block':'none';
+   b.textContent=show?'OCULTAR DETALLE DEL TRAMO':'VER DETALLE DEL TRAMO';
+ }));
+}
+
+function sClearAccount(){
+ const a=sAcc();
+ if(!a||!a.rows.length){
+   $('sumarError').textContent='La cuenta ya no tiene registros para limpiar.';
+   return;
+ }
+ if(!confirm('Esto borrará SOLO el historial actual de "'+a.name+'". Los tramos guardados permanecerán intactos. ¿Continuar?'))return;
+ a.rows=[];
+ sSave();
+ sRender();
+ sSummary();
+ sChart();
+ sTramoRender();
+ $('sumarError').textContent='Historial actual limpiado. Los tramos guardados se conservaron.';
+}
+
 function sChart(){const c=$('sumarChart'),note=$('sumarChartNote'),a=sAcc();if(!c||!note)return;const rows=(a&&a.rows?a.rows:[]).slice().sort((x,y)=>String(x.date).localeCompare(String(y.date))),plotted=rows.filter(r=>r.balance!=null),ctx=c.getContext('2d'),dpr=window.devicePixelRatio||1,rect=c.getBoundingClientRect(),w=Math.max(320,rect.width),h=Math.max(220,rect.height);c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);if(!plotted.length){note.textContent='Aún no hay saldos para graficar.';ctx.font='14px Arial';ctx.fillStyle='#697586';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('Sin datos todavía',w/2,h/2);return}note.textContent=plotted.length+' saldo'+(plotted.length===1?'':'s')+' disponible'+(plotted.length===1?'':'s')+' · '+a.name;const vals=plotted.map(r=>Number(r.balance)||0),mn=Math.min(...vals),mx=Math.max(...vals),rg=Math.max(1,mx-mn),pad={l:78,r:18,t:22,b:48},pw=w-pad.l-pad.r,ph=h-pad.t-pad.b,y0=mn-rg*.12,y1=mx+rg*.12,X=i=>plotted.length===1?pad.l+pw/2:pad.l+i/(plotted.length-1)*pw,Y=v=>pad.t+(1-(v-y0)/(y1-y0))*ph;ctx.font='11px Arial';ctx.textBaseline='middle';ctx.textAlign='right';for(let i=0;i<=4;i++){const v=y0+(y1-y0)*i/4,yy=Y(v);ctx.strokeStyle='#e8edf2';ctx.beginPath();ctx.moveTo(pad.l,yy);ctx.lineTo(w-pad.r,yy);ctx.stroke();ctx.fillStyle='#697586';ctx.fillText(money(v),pad.l-8,yy)}ctx.strokeStyle='#d8dee5';ctx.beginPath();ctx.moveTo(pad.l,pad.t);ctx.lineTo(pad.l,h-pad.b);ctx.lineTo(w-pad.r,h-pad.b);ctx.stroke();ctx.strokeStyle='#0b4fb3';ctx.lineWidth=2.5;ctx.beginPath();plotted.forEach((r,i)=>{const xx=X(i),yy=Y(r.balance);i?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy)});ctx.stroke();plotted.forEach((r,i)=>{const xx=X(i),yy=Y(r.balance);ctx.fillStyle='#fff';ctx.strokeStyle='#0b4fb3';ctx.lineWidth=2;ctx.beginPath();ctx.arc(xx,yy,4,0,Math.PI*2);ctx.fill();ctx.stroke()});ctx.font='11px Arial';ctx.fillStyle='#697586';ctx.textAlign='center';ctx.textBaseline='top';const step=plotted.length<=8?1:Math.ceil(plotted.length/8);plotted.forEach((r,i)=>{if(i===0||i===plotted.length-1||i%step===0)ctx.fillText(sDF(r.date),X(i),h-pad.b+12)})}
-sLoad();sRenderAccounts();$('sumarCurrentDate').value=sDate(new Date());$('sumarAccountSelect').addEventListener('change',()=>{sumarSelectedId=$('sumarAccountSelect').value;sRender();sSummary();sChart();sTramoRender()});$('sumarAddAccount').addEventListener('click',sAdd);$('sumarRenameAccount').addEventListener('click',sRename);$('sumarDeleteAccount').addEventListener('click',sDelete);$('sumarCurrentBalance').addEventListener('input',()=>sFmt('sumarCurrentBalance'));$('sumarMovementAmount').addEventListener('input',()=>sFmt('sumarMovementAmount'));$('sumarMovementType').addEventListener('change',()=>{$('sumarMovementWrap').style.display=$('sumarMovementType').value==='none'?'none':'block';if($('sumarMovementType').value==='none')$('sumarMovementAmount').value=''});$('saveSumarDaily').addEventListener('click',sSaveDaily);$('saveSumarTramo').addEventListener('click',sTramoSave);sRender();sSummary();sChart();sTramoRender();window.addEventListener('resize',sChart);
+sLoad();sRenderAccounts();$('sumarCurrentDate').value=sDate(new Date());$('sumarAccountSelect').addEventListener('change',()=>{sumarSelectedId=$('sumarAccountSelect').value;sRender();sSummary();sChart();sTramoRender()});$('sumarAddAccount').addEventListener('click',sAdd);$('sumarRenameAccount').addEventListener('click',sRename);$('sumarDeleteAccount').addEventListener('click',sDelete);$('sumarCurrentBalance').addEventListener('input',()=>sFmt('sumarCurrentBalance'));$('sumarMovementAmount').addEventListener('input',()=>sFmt('sumarMovementAmount'));$('sumarMovementType').addEventListener('change',()=>{$('sumarMovementWrap').style.display=$('sumarMovementType').value==='none'?'none':'block';if($('sumarMovementType').value==='none')$('sumarMovementAmount').value=''});$('saveSumarDaily').addEventListener('click',sSaveDaily);$('saveSumarTramo').addEventListener('click',sTramoSave);$('clearSumarAccount').addEventListener('click',sClearAccount);sRender();sSummary();sChart();sTramoRender();window.addEventListener('resize',sChart);
 /* ================= FIN SUMAR V12 ================= */
 const HISTORY_KEY='simulador_fic_cdt_historial_v1';
  function getHistory(){try{return JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]')}catch(e){return[]}}
