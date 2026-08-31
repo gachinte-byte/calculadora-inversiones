@@ -238,7 +238,7 @@ th{font-size:11px;color:#66717d}
     <div class="table-scroll">
       <table><thead><tr>
         <th>Fecha</th><th>Días</th><th>Saldo inicial</th><th>Movimiento</th>
-        <th>Rendimiento banco</th><th>Saldo final</th><th>Prom. diario</th><th>Rentabilidad E.A.</th><th></th>
+        <th>Rendimiento banco</th><th>Rend. estimado</th><th>Saldo final</th><th>Prom. diario</th><th>Rentabilidad E.A.</th><th></th>
       </tr></thead><tbody id="sumarDailyBody"></tbody></table>
     </div>
   </div>
@@ -417,23 +417,43 @@ function sRender(){
    let mv='—';
    if(r.movementType==='aporte')mv='Aporte<br>'+money(r.movementAmount);
    if(r.movementType==='retiro')mv='Retiro<br>'+money(r.movementAmount);
+
+   let estimatedGain=null, estimatedEA=null;
+   // Only estimate a tramo when BOTH endpoints have known balances and
+   // the current record does not have a bank-reported yield.
+   if(r.bankGain==null && initial!=null && r.balance!=null && Number(r.days)>0){
+     const movement = r.movementType==='aporte' ? Number(r.movementAmount||0) :
+                      r.movementType==='retiro' ? -Number(r.movementAmount||0) : 0;
+     estimatedGain = Number(r.balance) - initial - movement;
+     const base = initial + (movement>0?movement:0);
+     const ending = Number(r.balance);
+     if(base>0 && ending>0){
+       estimatedEA=Math.pow(ending/(initial+movement),365/Number(r.days))-1;
+     }
+   }
+
    const bal=r.balance==null?'—':money(r.balance)+(r.reconstructed?'<div class="small">estimado</div>':'');
    const bank=r.bankGain==null?'—':sM2(r.bankGain);
-   const avg=r.bankGain!=null&&r.days?sM2(Number(r.bankGain)/Number(r.days)):'—';
-   const ea=r.ea==null?'—':sP(r.ea);
+   const est=estimatedGain==null?'—':sM2(estimatedGain)+'<div class="small">tramo</div>';
+   const avg=r.bankGain!=null&&r.days?sM2(Number(r.bankGain)/Number(r.days)):
+             estimatedGain!=null?sM2(estimatedGain/Number(r.days)):'—';
+   const ea=r.ea!=null?sP(r.ea):
+            estimatedEA!=null?sP(estimatedEA)+'<div class="small">estimada</div>':'—';
+
    out+='<tr>'+
      '<td>'+sDF(r.date)+'</td>'+
      '<td>'+days+'</td>'+
      '<td>'+(initial==null?'—':money(initial))+'</td>'+
      '<td>'+mv+'</td>'+
      '<td>'+bank+'</td>'+
+     '<td>'+est+'</td>'+
      '<td>'+bal+'</td>'+
      '<td>'+avg+'</td>'+
      '<td>'+ea+'</td>'+
      '<td><button class="delete-history" data-srow="'+r.id+'">×</button></td>'+
    '</tr>';
  });
- $('sumarDailyBody').innerHTML=out||'<tr><td colspan="9" class="history-empty">Todavía no hay registros para esta cuenta.</td></tr>';
+ $('sumarDailyBody').innerHTML=out||'<tr><td colspan="10" class="history-empty">Todavía no hay registros para esta cuenta.</td></tr>';
  $('sumarDailyBody').querySelectorAll('[data-srow]').forEach(b=>b.addEventListener('click',()=>{
    const aa=sAcc(),id=Number(b.dataset.srow);
    if(aa&&confirm('¿Eliminar este registro?')){
@@ -446,15 +466,17 @@ function sSummary(){
  const a=sAcc(),rows=(a&&a.rows?a.rows:[]).slice().sort((x,y)=>String(x.date).localeCompare(String(y.date)));
  const valid=rows.filter(r=>r.balance!=null);
  const reported=rows.filter(r=>r.bankGain!=null);
+
  if(!valid.length){
    ['sumarCurrent','sumarAccountBalance','sumarAccountGain','sumarAccountAvg','sumarAccountEA','sumarPeriodGain','sumarPeriodAvg','sumarPeriodEA','sumarPeriodDays'].forEach(id=>$(id).textContent='—');
    $('sumarStatus').textContent='Registra un saldo o un rendimiento del banco.';
    return;
  }
+
  const last=valid[valid.length-1];
  $('sumarCurrent').textContent=money(last.balance);
  $('sumarAccountBalance').textContent=money(last.balance);
- $('sumarAccountGain').textContent=last.bankGain!=null?sM2(last.bankGain):'—';
+ $('sumarAccountGain').textContent=reported.length?sM2(reported.reduce((t,r)=>t+Number(r.bankGain),0)):'—';
  $('sumarAccountAvg').textContent=reported.length?sM2(reported.reduce((t,r)=>t+Number(r.bankGain),0)/reported.length):'—';
  $('sumarAccountEA').textContent=last.ea==null?'—':sP(last.ea);
 
@@ -466,19 +488,13 @@ function sSummary(){
  }
 
  const first=valid[0],periodDays=sDays(first.date,last.date);
-
- // IMPORTANT:
- // The period E.A. is NOT compounded from the total gain and is NOT inferred
- // from balance differences. It is the simple arithmetic average of the daily
- // E.A. values for days where the bank-reported yield exists.
  const dailyEA=[];
- let totalBank=0;
- let reportedDays=0;
+ let totalBank=0, reportedDays=0;
 
  rows.forEach((r,i)=>{
    if(r.bankGain==null || i===0) return;
    const p=rows[i-1];
-   if(p.balance==null) return;
+   if(!p || p.balance==null) return;
    const d=sDays(p.date,r.date);
    const base=sBase(p,r);
    const gain=Number(r.bankGain);
@@ -494,9 +510,10 @@ function sSummary(){
  const avgDaily=reported.length?reported.reduce((t,r)=>t+Number(r.bankGain),0)/reported.length:null;
 
  $('sumarStatus').textContent=
-   'Último saldo: '+sDF(last.date)+
-   ' · '+periodDays+' días analizados · '+
-   dailyEA.length+' días con rendimiento bancario.';
+   'Último saldo: '+sDF(last.date)+' · '+periodDays+
+   ' días analizados · '+dailyEA.length+
+   ' días con rendimiento bancario. Los tramos sin rendimiento reportado se muestran como estimados y no entran al E.A. promedio.';
+
  $('sumarPeriodGain').textContent=reported.length?money(totalBank):'—';
  $('sumarPeriodAvg').textContent=avgDaily!=null?sM2(avgDaily):'—';
  $('sumarPeriodEA').textContent=avgEA!=null?sP(avgEA):'—';
