@@ -71,7 +71,7 @@ th{font-size:11px;color:#66717d}
 #sumar #sumarChart{display:block;width:100%;height:100%}
 #sumar .saved-sumar{border:1px solid #dfe4e8;border-radius:14px;padding:14px;margin-bottom:10px;background:#fff}
 @media(max-width:700px){#sumar .sumar-summary-grid{grid-template-columns:1fr 1fr}#sumar .sumar-account-actions{width:100%}#sumar .sumar-account-actions button{flex:1}}
-</style>
+#sumar .table-scroll table{min-width:900px}#sumar .table-scroll th,#sumar .table-scroll td{white-space:nowrap}</style>
 </head>
 <body>
 <div class="wrap">
@@ -223,7 +223,7 @@ th{font-size:11px;color:#66717d}
 
     <label for="sumarBankYield">Rendimiento reportado por el banco <span class="small">(opcional)</span></label>
     <div class="input-wrap"><span class="prefix">$</span><input id="sumarBankYield" type="text" inputmode="decimal" autocomplete="off" placeholder="11.823,36"></div>
-    <div class="small">Si lo tienes, este es el dato que se utiliza para obtener la tasa diaria y su E.A. equivalente. Si lo dejas vacío, se estima desde los saldos.</div>
+    <div class="small">Puedes introducir este dato aunque no tengas el saldo de ese día. La app calcula el promedio diario y la Rentabilidad E.A. equivalente.</div>
 
     <button class="primary" id="saveSumarDaily" type="button">GUARDAR SALDO</button>
     <div id="sumarError" class="err"></div>
@@ -232,13 +232,13 @@ th{font-size:11px;color:#66717d}
   <div class="card">
     <div class="section-head">
       <div><h3 style="margin:0">Historial de la cuenta</h3>
-      <div class="small">Rendimiento implícito = saldo final − saldo anterior − aporte + retiro.</div></div>
+      <div class="small">El banco reporta el rendimiento diario; los aportes y retiros se muestran aparte.</div></div>
       <div class="pill" id="sumarRowsCount">0 registros</div>
     </div>
     <div class="table-scroll">
       <table><thead><tr>
-        <th>Fecha</th><th>Días</th><th>Saldo final</th><th>Movimiento</th>
-        <th>Rend. banco</th><th>Rend. implícito</th><th>Rentabilidad E.A.</th><th></th>
+        <th>Fecha</th><th>Días</th><th>Saldo inicial</th><th>Movimiento</th>
+        <th>Rendimiento banco</th><th>Saldo final</th><th>Prom. diario</th><th>Rentabilidad E.A.</th><th></th>
       </tr></thead><tbody id="sumarDailyBody"></tbody></table>
     </div>
   </div>
@@ -406,7 +406,42 @@ function sCalc(a){
  for(let i=a.rows.length-1;i>0;i--){const r=a.rows[i],p=a.rows[i-1];if(r.balance==null||p.balance!=null||sDays(p.date,r.date)!==1||p.bankGain==null)continue;let b=Number(r.balance);if(p.movementType==='aporte')b-=p.movementAmount;if(p.movementType==='retiro')b+=p.movementAmount;b-=p.bankGain;p.balance=b;p.reconstructed=true}
  a.rows.forEach((r,i)=>{r.days=null;r.calcGain=null;r.ea=null;if(i===0){if(r.balance!=null&&r.bankGain!=null&&r.balance>0)r.ea=sEA(r.bankGain/r.balance);return}const p=a.rows[i-1],d=sDays(p.date,r.date);r.days=d;if(p.balance==null||r.balance==null)return;const base=sBase(p,r);r.calcGain=Number(r.balance)-Number(p.balance)-(r.movementType==='aporte'?r.movementAmount:0)+(r.movementType==='retiro'?r.movementAmount:0);const g=r.bankGain!=null?r.bankGain:(r.movementType==='none'?r.calcGain:null);if(g!=null&&base>0&&1+g/base>0)r.ea=sEA(Math.pow(1+g/base,1/d)-1)})}
 function sRenderAccounts(){const e=$('sumarAccountSelect');e.innerHTML='';sumarAccounts.forEach(a=>{const o=document.createElement('option');o.value=a.id;o.textContent=a.name;e.appendChild(o)});e.value=sumarSelectedId}
-function sRender(){const a=sAcc(),rows=(a&&a.rows?a.rows:[]).slice().sort((x,y)=>String(x.date).localeCompare(String(y.date)));$('sumarRowsCount').textContent=rows.length+' registro'+(rows.length===1?'':'s');let out='';rows.forEach(r=>{let mv='—';if(r.movementType==='aporte')mv='Aporte<br>'+money(r.movementAmount);if(r.movementType==='retiro')mv='Retiro<br>'+money(r.movementAmount);const bal=r.balance==null?'—':money(r.balance)+(r.reconstructed?'<div class="small">estimado</div>':'');const calc=(r.calcGain==null||r.movementType!=='none'&&r.bankGain==null)?'—':sM2(r.calcGain);const ea=r.ea==null?'—':sP(r.ea);out+='<tr><td>'+sDF(r.date)+'</td><td>'+(r.days||'—')+'</td><td>'+bal+'</td><td>'+mv+'</td><td>'+(r.bankGain==null?'—':sM2(r.bankGain))+'</td><td>'+calc+'</td><td>'+ea+'</td><td><button class="delete-history" data-srow="'+r.id+'">×</button></td></tr>'});$('sumarDailyBody').innerHTML=out||'<tr><td colspan="8" class="history-empty">Todavía no hay registros para esta cuenta.</td></tr>';$('sumarDailyBody').querySelectorAll('[data-srow]').forEach(b=>b.addEventListener('click',()=>{const aa=sAcc(),id=Number(b.dataset.srow);if(aa&&confirm('¿Eliminar este registro?')){aa.rows=aa.rows.filter(r=>Number(r.id)!==id);sCalc(aa);sSave();sRender();sSummary();sChart();sTramoRender()}}))}
+function sRender(){
+ const a=sAcc(),rows=(a&&a.rows?a.rows:[]).slice().sort((x,y)=>String(x.date).localeCompare(String(y.date)));
+ $('sumarRowsCount').textContent=rows.length+' registro'+(rows.length===1?'':'s');
+ let out='';
+ rows.forEach((r,i)=>{
+   const p=i>0?rows[i-1]:null;
+   const days=r.days||'—';
+   const initial=p&&p.balance!=null?Number(p.balance):null;
+   let mv='—';
+   if(r.movementType==='aporte')mv='Aporte<br>'+money(r.movementAmount);
+   if(r.movementType==='retiro')mv='Retiro<br>'+money(r.movementAmount);
+   const bal=r.balance==null?'—':money(r.balance)+(r.reconstructed?'<div class="small">estimado</div>':'');
+   const bank=r.bankGain==null?'—':sM2(r.bankGain);
+   const avg=r.bankGain!=null&&r.days?sM2(Number(r.bankGain)/Number(r.days)):'—';
+   const ea=r.ea==null?'—':sP(r.ea);
+   out+='<tr>'+
+     '<td>'+sDF(r.date)+'</td>'+
+     '<td>'+days+'</td>'+
+     '<td>'+(initial==null?'—':money(initial))+'</td>'+
+     '<td>'+mv+'</td>'+
+     '<td>'+bank+'</td>'+
+     '<td>'+bal+'</td>'+
+     '<td>'+avg+'</td>'+
+     '<td>'+ea+'</td>'+
+     '<td><button class="delete-history" data-srow="'+r.id+'">×</button></td>'+
+   '</tr>';
+ });
+ $('sumarDailyBody').innerHTML=out||'<tr><td colspan="9" class="history-empty">Todavía no hay registros para esta cuenta.</td></tr>';
+ $('sumarDailyBody').querySelectorAll('[data-srow]').forEach(b=>b.addEventListener('click',()=>{
+   const aa=sAcc(),id=Number(b.dataset.srow);
+   if(aa&&confirm('¿Eliminar este registro?')){
+     aa.rows=aa.rows.filter(r=>Number(r.id)!==id);
+     sCalc(aa);sSave();sRender();sSummary();sChart();sTramoRender();
+   }
+ }));
+}
 function sSummary(){const a=sAcc(),rows=(a&&a.rows?a.rows:[]).slice().sort((x,y)=>String(x.date).localeCompare(String(y.date))),valid=rows.filter(r=>r.balance!=null);if(!valid.length){['sumarCurrent','sumarAccountBalance','sumarAccountGain','sumarAccountAvg','sumarAccountEA','sumarPeriodGain','sumarPeriodAvg','sumarPeriodEA','sumarPeriodDays'].forEach(id=>$(id).textContent='—');$('sumarStatus').textContent='Registra un saldo o un rendimiento del banco.';return}const last=valid[valid.length-1],reported=rows.filter(r=>r.bankGain!=null);$('sumarCurrent').textContent=money(last.balance);$('sumarAccountBalance').textContent=money(last.balance);$('sumarAccountGain').textContent=last.bankGain!=null?sM2(last.bankGain):(last.movementType==='none'&&last.calcGain!=null?sM2(last.calcGain):'—');$('sumarAccountAvg').textContent=reported.length?sM2(reported.reduce((t,r)=>t+Number(r.bankGain),0)/reported.length):'—';$('sumarAccountEA').textContent=last.ea==null?'—':sP(last.ea);if(valid.length<2){$('sumarStatus').textContent='Los rendimientos diarios se irán reconstruyendo al registrar un saldo conocido.';['sumarPeriodGain','sumarPeriodAvg','sumarPeriodEA'].forEach(id=>$(id).textContent='—');$('sumarPeriodDays').textContent='1';return}const first=valid[0],days=sDays(first.date,last.date);let total=0,rateLog=0,rateDays=0;for(let i=1;i<rows.length;i++){const r=rows[i],p=rows[i-1],d=r.days||1;if(r.bankGain!=null){const base=sBase(p,r);if(base>0&&1+r.bankGain/base>0){total+=Number(r.bankGain);rateLog+=Math.log(1+r.bankGain/base)*d;rateDays+=d}}else if(r.movementType==='none'&&r.calcGain!=null&&p.balance!=null){const base=Number(p.balance);if(base>0&&1+r.calcGain/base>0){total+=Number(r.calcGain);rateLog+=Math.log(1+r.calcGain/base)*d;rateDays+=d}}}const rate=rateDays?Math.exp(rateLog/rateDays)-1:0;$('sumarStatus').textContent='Último saldo: '+sDF(last.date)+' · '+days+' días. El E.A. diario usa el rendimiento informado por el banco.';$('sumarPeriodGain').textContent=rateDays?money(total):'—';$('sumarPeriodAvg').textContent=rateDays?sM2(total/rateDays):'—';$('sumarPeriodEA').textContent=rateDays?sP(sEA(rate)):'—';$('sumarPeriodDays').textContent=days}
 function sSaveDaily(){const a=sAcc(),date=$('sumarCurrentDate').value,balance=$('sumarCurrentBalance').value.trim()?sMoney('sumarCurrentBalance'):null,type=$('sumarMovementType').value,amount=type==='none'?0:sMoney('sumarMovementAmount'),bank=$('sumarBankYield').value.trim()?sYield('sumarBankYield'):null;if(!a||!date){$('sumarError').textContent='Ingresa la fecha.';return}if(balance==null&&bank==null&&type==='none'){$('sumarError').textContent='Ingresa al menos el saldo o el rendimiento del banco.';return}if(type!=='none'&&!amount){$('sumarError').textContent='Ingresa el valor del aporte o retiro.';return}const old=a.rows.find(r=>r.date===date);if(old){if(!confirm('Ya existe un registro para '+sDF(date)+'. ¿Reemplazarlo?'))return;old.balance=balance;old.movementType=type;old.movementAmount=amount;old.bankGain=bank}else a.rows.push({id:Date.now(),date,balance,movementType:type,movementAmount:amount,bankGain:bank});sCalc(a);sSave();sRender();sSummary();sChart();sTramoRender();$('sumarCurrentBalance').value='';$('sumarMovementAmount').value='';$('sumarBankYield').value='';$('sumarMovementType').value='none';$('sumarMovementWrap').style.display='none';$('sumarError').textContent=''}
 function sAdd(){const name=prompt('Nombre de la nueva cuenta o inversión:','Banco de Bogotá – Sumar');if(!name||!name.trim())return;sumarSelectedId='acc_'+Date.now();sumarAccounts.push({id:sumarSelectedId,name:name.trim(),rows:[]});sSave();sRenderAccounts();sRender();sSummary();sChart();sTramoRender()}
