@@ -58,14 +58,7 @@ th{font-size:11px;color:#66717d}
 
 .delete-history{width:36px;height:36px;flex:0 0 36px;border:1px solid #d7dce0;border-radius:9px;background:#fff;color:#66717d;font-size:22px;line-height:1;cursor:pointer}
 .delete-history:hover{background:#f1f3f5;color:#18212b}
-
-.section-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
-.pill{font-size:10px;font-weight:800;letter-spacing:.08em;padding:7px 9px;border-radius:999px;background:#e8f5e9;color:#176b45}
-.secondary.compact{height:38px;width:auto;padding:0 12px;font-size:12px}
-.chart-wrap{margin-top:14px;border:1px solid #e7eaed;border-radius:13px;padding:8px;overflow:hidden}
-.chart-wrap canvas{width:100%;height:auto;display:block}
-.history-edit,.history-delete{width:34px;height:34px;border:1px solid #d7dce0;border-radius:9px;background:#fff;cursor:pointer}
-.history-delete{font-size:18px}
+.edit-history{width:36px;height:36px;flex:0 0 36px;border:1px solid #d7dce0;border-radius:9px;background:#fff;color:#18212b;font-size:18px;line-height:1;cursor:pointer}.edit-history:hover{background:#f1f3f5}
 </style>
 </head>
 <body>
@@ -76,7 +69,6 @@ th{font-size:11px;color:#66717d}
     <button class="active" data-page="sim">Simulador</button>
     <button data-page="monthly">Proyección mensual</button>
     <button data-page="rates">Escenarios EA</button>
-    <button data-page="sumar">Sumar</button>
     <button data-page="history">Historial</button>
   </div>
 
@@ -158,52 +150,6 @@ th{font-size:11px;color:#66717d}
     <div class="card">
       <h3 style="margin-top:0">Comparación rápida</h3>
       <div class="scenarios" id="scenarioCards"></div>
-    </div>
-  </section>
-
-
-  <section id="sumar" class="page">
-    <div class="card">
-      <div class="section-head"><div><h2 style="margin:0">Seguimiento Sumar</h2><div class="small">Registra el saldo real de tu fiducia día a día.</div></div><div class="pill">REAL</div></div>
-    </div>
-
-    <div class="hero-result">
-      <div class="hero-label">SALDO ACTUAL</div>
-      <div class="hero-value" id="sumarCurrent">$—</div>
-      <div class="hero-gain" id="sumarAccum">Registra al menos 2 días para calcular la ganancia.</div>
-    </div>
-
-    <div class="results">
-      <div class="result"><div class="k">Rentabilidad diaria promedio · 7 días</div><div class="v" id="sumarAvg7">—</div></div>
-      <div class="result"><div class="k">E.A. equivalente · 7 días</div><div class="v" id="sumarEA7">—</div></div>
-      <div class="result"><div class="k">Rentabilidad diaria promedio · 15 días</div><div class="v" id="sumarAvg15">—</div></div>
-      <div class="result"><div class="k">E.A. equivalente · 15 días</div><div class="v" id="sumarEA15">—</div></div>
-    </div>
-
-    <div class="card" style="margin-top:14px">
-      <h3 style="margin-top:0">Registrar rendimiento</h3>
-      <div class="small" style="margin-bottom:14px">Ingresa el saldo final que ves en Sumar. La aplicación compara con el registro anterior y calcula la rentabilidad real del día.</div>
-      <label for="sumarDate">Fecha</label>
-      <div class="input-wrap"><input id="sumarDate" type="date"></div>
-      <label for="sumarBalance">Saldo final informado por Sumar</label>
-      <div class="input-wrap"><span class="prefix">$</span><input id="sumarBalance" type="text" inputmode="numeric" autocomplete="off" placeholder="25.000.000"></div>
-      <label for="sumarNote">Nota (opcional)</label>
-      <div class="input-wrap"><input id="sumarNote" type="text" maxlength="60" placeholder="Ej. aporte, retiro o cierre del día"></div>
-      <div id="sumarError" class="err"></div>
-      <button class="primary" id="saveSumar" type="button">GUARDAR RENDIMIENTO</button>
-    </div>
-
-    <div class="card">
-      <div class="section-head"><div><h3 style="margin:0">Evolución del saldo</h3><div class="small">Últimos 15 registros</div></div><button class="secondary compact" id="clearSumar" type="button">Borrar todo</button></div>
-      <div class="chart-wrap"><canvas id="sumarChart" width="560" height="240"></canvas></div>
-    </div>
-
-    <div class="card">
-      <h3 style="margin-top:0">Historial diario</h3>
-      <div class="table-scroll">
-        <table><thead><tr><th>Fecha</th><th>Saldo</th><th>Rendimiento</th><th>Diario</th><th></th></tr></thead><tbody id="sumarBody"></tbody></table>
-      </div>
-      <div class="note">El rendimiento diario se obtiene comparando el saldo con el día anterior. Si hubo un aporte o retiro, déjalo indicado en la nota para interpretar correctamente el resultado.</div>
     </div>
   </section>
 
@@ -316,64 +262,6 @@ th{font-size:11px;color:#66717d}
  }
 
 
- function escapeHtml(text){return String(text).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
-
- const SUMAR_KEY='gaachinte_sumar_daily_v1';
- function getSumar(){try{const x=JSON.parse(localStorage.getItem(SUMAR_KEY)||'[]');return Array.isArray(x)?x:[]}catch(e){return[]}}
- function saveSumarData(x){try{localStorage.setItem(SUMAR_KEY,JSON.stringify(x))}catch(e){}}
- function parseMoneyInput(id){const raw=$(id).value.replace(/\D/g,'');return raw?Number(raw):0}
- function formatMoneyInput(id){const n=parseMoneyInput(id);$(id).value=n?new Intl.NumberFormat('es-CO',{maximumFractionDigits:0}).format(n):''}
- function localDateString(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
- function formatDate(s){if(!s)return'—';const [y,m,d]=s.split('-');return `${d}/${m}/${y}`}
- function sumarRows(){return getSumar().sort((a,b)=>a.date.localeCompare(b.date))}
- function sumarMetrics(rows,n){
-   const r=rows.slice(-n); if(r.length<2)return null;
-   const first=r[0],last=r[r.length-1];
-   const totalDays=Math.max(1,(new Date(last.date+'T12:00:00')-new Date(first.date+'T12:00:00'))/86400000);
-   const daily=Math.pow(last.balance/first.balance,1/totalDays)-1;
-   return {growth:last.balance/first.balance-1,daily,ea:Math.pow(1+daily,365)-1}
- }
- function renderSumar(){
-   const rows=sumarRows(), current=rows.length?rows[rows.length-1].balance:0;
-   $('sumarCurrent').textContent=current?money(current):'—';
-   $('sumarAccum').textContent=rows.length>1?'Ganancia acumulada: '+money(current-rows[0].balance):'Registra al menos 2 días para calcular la ganancia.';
-   const m7=sumarMetrics(rows,7),m15=sumarMetrics(rows,15);
-   $('sumarAvg7').textContent=m7?pct(m7.daily):'—'; $('sumarEA7').textContent=m7?pct(m7.ea):'—';
-   $('sumarAvg15').textContent=m15?pct(m15.daily):'—'; $('sumarEA15').textContent=m15?pct(m15.ea):'—';
-   const body=$('sumarBody');
-   if(!rows.length){body.innerHTML='<tr><td colspan="5" style="text-align:center;color:#66717d">Todavía no hay registros.</td></tr>'}
-   else{
-     body.innerHTML=rows.slice().reverse().map((v,rev)=>{
-       const idx=rows.length-1-rev,prev=idx>0?rows[idx-1]:null;
-       const gain=prev?v.balance-prev.balance:null,daily=prev&&prev.balance?v.balance/prev.balance-1:null;
-       return `<tr><td>${formatDate(v.date)}${v.note?`<br><span style="font-size:10px;color:#8a949d">${escapeHtml(v.note)}</span>`:''}</td><td>${money(v.balance)}</td><td>${gain===null?'—':money(gain)}</td><td>${daily===null?'—':pct(daily)}</td><td><button class="history-edit" data-sumar-edit="${idx}" title="Editar">✎</button> <button class="history-delete" data-sumar-delete="${idx}" title="Borrar">×</button></td></tr>`;
-     }).join('');
-   }
-   body.querySelectorAll('[data-sumar-edit]').forEach(btn=>btn.addEventListener('click',()=>{
-     const rows=sumarRows(),i=Number(btn.dataset.sumarEdit),r=rows[i];if(!r)return;
-     const b=prompt('Saldo final de Sumar:',String(Math.round(r.balance)));if(b===null)return;
-     const n=Number(String(b).replace(/\D/g,''));if(!n)return;
-     const note=prompt('Nota (opcional):',r.note||'');r.balance=n;if(note!==null)r.note=note.trim().slice(0,60);
-     saveSumarData(rows);renderSumar();
-   }));
-   body.querySelectorAll('[data-sumar-delete]').forEach(btn=>btn.addEventListener('click',()=>{
-     const rows=sumarRows(),i=Number(btn.dataset.sumarDelete);if(!rows[i])return;
-     if(confirm('¿Borrar este registro?')){rows.splice(i,1);saveSumarData(rows);renderSumar();}
-   }));
-   drawSumarChart();
- }
- function drawSumarChart(){
-   const c=$('sumarChart'),ctx=c.getContext('2d'),rows=sumarRows().slice(-15),w=c.width,h=c.height;
-   ctx.clearRect(0,0,w,h);
-   if(rows.length<2){ctx.fillStyle='#66717d';ctx.font='14px Arial';ctx.textAlign='center';ctx.fillText('Registra al menos 2 días para ver el gráfico',w/2,h/2);return}
-   const pad={l:18,r:18,t:20,b:30},min=Math.min(...rows.map(x=>x.balance)),max=Math.max(...rows.map(x=>x.balance)),range=max-min||1,iw=w-pad.l-pad.r,ih=h-pad.t-pad.b;
-   ctx.strokeStyle='#dfe4e8';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pad.l,h-pad.b);ctx.lineTo(w-pad.r,h-pad.b);ctx.stroke();
-   ctx.beginPath();rows.forEach((r,i)=>{const x=pad.l+i*iw/(rows.length-1),y=pad.t+(max-r.balance)*ih/range;i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.strokeStyle='#0d3b34';ctx.lineWidth=3;ctx.stroke();
-   rows.forEach((r,i)=>{const x=pad.l+i*iw/(rows.length-1),y=pad.t+(max-r.balance)*ih/range;ctx.fillStyle='#d4af37';ctx.beginPath();ctx.arc(x,y,4,0,Math.PI*2);ctx.fill()});
-   ctx.fillStyle='#66717d';ctx.font='10px Arial';ctx.textAlign='left';ctx.fillText(formatDate(rows[0].date),pad.l,h-10);ctx.textAlign='right';ctx.fillText(formatDate(rows[rows.length-1].date),w-pad.r,h-10);
- }
- function setSumarToday(){$('sumarDate').value=localDateString(new Date())}
-
  const HISTORY_KEY='simulador_fic_cdt_historial_v1';
  function getHistory(){try{return JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]')}catch(e){return[]}}
  function saveHistoryItem(){
@@ -385,10 +273,25 @@ th{font-size:11px;color:#66717d}
    try{localStorage.setItem(HISTORY_KEY,JSON.stringify(h))}catch(e){}
    renderHistory();
  }
+ function escapeHtml(text){
+   return String(text).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+ }
+ function editHistoryDescription(i){
+   const h=getHistory(), item=h[i];
+   if(!item) return;
+   const value=window.prompt('Descripción de esta inversión:', item.description || '');
+   if(value===null) return;
+   item.description=value.trim().slice(0,50);
+   try{localStorage.setItem(HISTORY_KEY,JSON.stringify(h))}catch(e){}
+   renderHistory();
+ }
  function renderHistory(){
    const box=$('historyList'),h=getHistory();
    if(!h.length){box.innerHTML='<div class="history-empty">Todavía no hay simulaciones guardadas.</div>';return}
-   box.innerHTML=h.map((v,i)=>`<div class="history-item"><div class="history-main"><div class="history-title">${money(v.capital)} · ${(v.ea*100).toFixed(2)}% E.A.</div><div class="history-meta">${v.days} días · ${v.date} · ReteFuente ${(v.ret*100).toFixed(0)}%</div></div><div class="history-result">${money(v.final)}<br><span style="font-size:12px;color:#66717d">+${money(v.net)}</span></div><button class="delete-history" type="button" data-history-index="${i}" aria-label="Borrar esta simulación">×</button></div>`).join('');
+   box.innerHTML=h.map((v,i)=>`<div class="history-item"><div class="history-main"><div class="history-title">${escapeHtml(v.description || 'Añadir descripción')}</div><div class="history-meta">${money(v.capital)} · ${(v.ea*100).toFixed(2)}% E.A. · ${v.days} días · ReteFuente ${(v.ret*100).toFixed(0)}% · ${v.date}</div></div><div class="history-result">${money(v.final)}<br><span style="font-size:12px;color:#66717d">+${money(v.net)}</span></div><button class="edit-history" type="button" data-history-index="${i}" aria-label="Editar descripción">✎</button><button class="delete-history" type="button" data-history-index="${i}" aria-label="Borrar esta simulación">×</button></div>`).join('');
+   box.querySelectorAll('.edit-history').forEach(btn=>btn.addEventListener('click',()=>{
+     editHistoryDescription(Number(btn.dataset.historyIndex));
+   }));
    box.querySelectorAll('.delete-history').forEach(btn=>btn.addEventListener('click',()=>{
      const i=Number(btn.dataset.historyIndex); let items=getHistory(); items.splice(i,1);
      try{localStorage.setItem(HISTORY_KEY,JSON.stringify(items))}catch(e){}
@@ -457,25 +360,8 @@ th{font-size:11px;color:#66717d}
  renderHistory();
  loadValues();
  formatCapital();
-
  calculate();
-
- setSumarToday();
- $('sumarBalance').addEventListener('input',()=>formatMoneyInput('sumarBalance'));
- $('saveSumar').addEventListener('click',()=>{
-   const err=$('sumarError'),date=$('sumarDate').value,balance=parseMoneyInput('sumarBalance'),note=$('sumarNote').value.trim().slice(0,60);
-   if(!date){err.textContent='Selecciona una fecha.';return}
-   if(!balance||balance<=0){err.textContent='Ingresa un saldo mayor que cero.';return}
-   err.textContent='';
-   let rows=getSumar(),i=rows.findIndex(x=>x.date===date);
-   const item={date,balance,note}; if(i>=0)rows[i]=item;else rows.push(item);
-   rows.sort((a,b)=>a.date.localeCompare(b.date));saveSumarData(rows);renderSumar();
-   $('sumarBalance').value='';$('sumarNote').value='';
- });
- $('clearSumar').addEventListener('click',()=>{if(confirm('¿Borrar todos los registros diarios de Sumar?')){localStorage.removeItem(SUMAR_KEY);renderSumar();}});
- renderSumar();
 })();
-
 </script>
 </body>
 </html>
