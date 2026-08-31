@@ -59,6 +59,11 @@ th{font-size:11px;color:#66717d}
 .delete-history{width:36px;height:36px;flex:0 0 36px;border:1px solid #d7dce0;border-radius:9px;background:#fff;color:#66717d;font-size:22px;line-height:1;cursor:pointer}
 .delete-history:hover{background:#f1f3f5;color:#18212b}
 .edit-history{width:36px;height:36px;flex:0 0 36px;border:1px solid #d7dce0;border-radius:9px;background:#fff;color:#18212b;font-size:18px;line-height:1;cursor:pointer}.edit-history:hover{background:#f1f3f5}
+
+  .sumar-input-table .input-wrap.table-input{margin:0;min-width:130px;height:42px}
+  .sumar-input-table .input-wrap.table-input input{height:40px;font-size:14px}
+  .saved-sumar{border:1px solid #dfe4e8;border-radius:14px;padding:14px;margin-bottom:10px;background:#fff}
+  .saved-sumar summary{cursor:pointer;color:#18212b;font-weight:700}
 </style>
 </head>
 <body>
@@ -69,7 +74,7 @@ th{font-size:11px;color:#66717d}
     <button class="active" data-page="sim">Simulador</button>
     <button data-page="monthly">Proyección mensual</button>
     <button data-page="rates">Escenarios EA</button>
-    <button data-page="history">Historial</button>
+    <button data-page="sumar">Sumar</button><button data-page="history">Historial</button>
   </div>
 
   <section id="sim" class="page active">
@@ -150,6 +155,68 @@ th{font-size:11px;color:#66717d}
     <div class="card">
       <h3 style="margin-top:0">Comparación rápida</h3>
       <div class="scenarios" id="scenarioCards"></div>
+    </div>
+  </section>
+
+
+  <section id="sumar" class="page">
+    <div class="card">
+      <div class="section-head">
+        <div><h2 style="margin:0">Seguimiento Sumar</h2><div class="small">Analiza de 1 a 15 días usando únicamente los rendimientos reales que te informa Sumar.</div></div>
+        <div class="pill">REAL</div>
+      </div>
+    </div>
+    <div class="hero-result">
+      <div class="hero-label">SALDO ACTUAL</div>
+      <div class="hero-value" id="sumarCurrent">$—</div>
+      <div class="hero-gain" id="sumarStatus">Ingresa el saldo actual y selecciona los días.</div>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Datos de referencia</h3>
+      <label for="sumarCurrentDate">Fecha del saldo actual</label>
+      <div class="input-wrap"><input id="sumarCurrentDate" type="date"></div>
+      <label for="sumarCurrentBalance">Saldo actual de Sumar</label>
+      <div class="input-wrap"><span class="prefix">$</span><input id="sumarCurrentBalance" type="text" inputmode="numeric" autocomplete="off" placeholder="41.988.911"></div>
+      <label for="sumarDays">Días a analizar</label>
+      <div class="input-wrap"><select id="sumarDays"></select></div>
+      <label for="sumarInitialReal">Saldo inicial real (opcional)</label>
+      <div class="input-wrap"><span class="prefix">$</span><input id="sumarInitialReal" type="text" inputmode="numeric" autocomplete="off" placeholder="Saldo que realmente tenías al inicio"></div>
+      <div class="small">Sirve para comprobar que los rendimientos ingresados reconstruyen correctamente el saldo inicial.</div>
+      <button class="primary" id="buildSumarTable" type="button">MOSTRAR DÍAS</button>
+    </div>
+    <div class="card">
+      <div class="section-head">
+        <div><h3 style="margin:0">Rendimientos diarios</h3><div class="small">Aquí solo escribes el rendimiento en pesos que muestra Sumar.</div></div>
+        <div class="pill" id="sumarFilled">0 / 1</div>
+      </div>
+      <div class="table-scroll">
+        <table class="sumar-input-table">
+          <thead><tr><th>Día</th><th>Fecha</th><th>Saldo inicial</th><th>Rendimiento</th><th>Saldo final</th><th>Rent. diaria</th><th>E.A.</th></tr></thead>
+          <tbody id="sumarInputBody"></tbody>
+        </table>
+      </div>
+      <div id="sumarError" class="err"></div>
+      <button class="primary" id="saveSumarHistory" type="button">GUARDAR TRAMO EN HISTORIAL</button>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Comprobación del tramo</h3>
+      <div class="results" style="margin-top:0">
+        <div class="result"><div class="k">Saldo inicial reconstruido</div><div class="v" id="sumarInitialCalc">—</div></div>
+        <div class="result"><div class="k">Saldo inicial real</div><div class="v" id="sumarInitialShown">—</div></div>
+        <div class="result"><div class="k">Diferencia</div><div class="v" id="sumarDifference">—</div></div>
+        <div class="result"><div class="k">Rendimiento del tramo</div><div class="v" id="sumarTotalGain">—</div></div>
+      </div>
+      <div class="note" id="sumarCheckMessage">El saldo inicial reconstruido se obtiene restando hacia atrás los rendimientos desde el saldo actual.</div>
+    </div>
+    <div class="results">
+      <div class="result"><div class="k">E.A. últimos 7 días disponibles</div><div class="v" id="sumarEA7">—</div></div>
+      <div class="result"><div class="k">E.A. últimos 15 días disponibles</div><div class="v" id="sumarEA15">—</div></div>
+      <div class="result"><div class="k">E.A. tramo completo</div><div class="v" id="sumarEA30">—</div></div>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Historial de tramos</h3>
+      <div class="small" style="margin-bottom:12px">Cada análisis guardado queda almacenado en este dispositivo para compararlo más adelante.</div>
+      <div id="sumarSavedHistory"></div>
     </div>
   </section>
 
@@ -260,6 +327,102 @@ th{font-size:11px;color:#66717d}
        `<div class="scenario"><strong>${rr.toFixed(2)}%</strong><span>Ganancia neta<br>${money(n)}</span></div>`);
    });
  }
+  const SUMAR_KEY='gaachinte_sumar_tramos_integrado_v1';
+  let sumarDraft=[];
+
+  function getSumar(){try{const x=JSON.parse(localStorage.getItem(SUMAR_KEY)||'[]');return Array.isArray(x)?x:[]}catch(e){return[]}}
+  function saveSumarData(x){try{localStorage.setItem(SUMAR_KEY,JSON.stringify(x))}catch(e){}}
+  function sumarParseMoney(id){const raw=$(id).value.replace(/\D/g,'');return raw?Number(raw):0}
+  function sumarFormatMoney(id){const n=sumarParseMoney(id);$(id).value=n?new Intl.NumberFormat('es-CO',{maximumFractionDigits:0}).format(n):''}
+  function sumarParseGain(v){const raw=String(v||'').trim().replace(/\$/g,'').replace(/\s/g,'').replace(/\./g,'').replace(',','.').replace(/[^\d.-]/g,'');const n=Number(raw);return Number.isFinite(n)?n:null}
+  function sumarFormatGain(el){const n=sumarParseGain(el.value);if(n!==null)el.value=new Intl.NumberFormat('es-CO',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n)}
+  function sumarDateNow(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+  function sumarDateFmt(s){if(!s)return'—';const [y,m,d]=s.split('-');return `${d}/${m}/${y}`}
+  function sumarAddDays(s,n){const d=new Date(s+'T12:00:00');d.setDate(d.getDate()+n);return sumarDateNow(d)}
+  function sumarMoney2(n){return new Intl.NumberFormat('es-CO',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n)}
+  function sumarPct(n){return new Intl.NumberFormat('es-CO',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n*100)+'%'}
+  function sumarEA(d){return Math.pow(1+d,365)-1}
+
+  function initSumarDays(){
+    const s=$('sumarDays');s.innerHTML='';
+    for(let i=1;i<=15;i++){const o=document.createElement('option');o.value=i;o.textContent=i+(i===1?' día':' días');s.appendChild(o)}
+  }
+  function buildSumarTable(){
+    const date=$('sumarCurrentDate').value,balance=sumarParseMoney('sumarCurrentBalance'),days=Number($('sumarDays').value);
+    if(!date||!balance){$('sumarError').textContent='Ingresa la fecha y el saldo actual.';return}
+    $('sumarError').textContent='';
+    const old={};sumarDraft.forEach(x=>old[x.date]=x);sumarDraft=[];
+    for(let i=days;i>=1;i--){const d=sumarAddDays(date,-i);sumarDraft.push({date:d,gain:old[d]?.gain??null})}
+    renderSumarTable();
+  }
+  function renderSumarTable(){
+    const body=$('sumarInputBody');
+    $('sumarFilled').textContent=`${sumarDraft.filter(x=>x.gain!=null).length} / ${sumarDraft.length}`;
+    body.innerHTML=sumarDraft.map((r,i)=>`
+      <tr><td>${i+1}</td><td>${sumarDateFmt(r.date)}</td><td id="sumarStart_${i}">—</td>
+      <td><div class="input-wrap table-input"><span class="prefix">$</span><input class="sumar-gain" data-i="${i}" type="text" inputmode="decimal" placeholder="0,00" value="${r.gain!=null?sumarMoney2(r.gain):''}"></div></td>
+      <td id="sumarEnd_${i}">—</td><td id="sumarDaily_${i}">—</td><td id="sumarEA_${i}">—</td></tr>`).join('');
+    body.querySelectorAll('.sumar-gain').forEach(el=>{
+      el.addEventListener('input',()=>{const i=Number(el.dataset.i);sumarDraft[i].gain=sumarParseGain(el.value);updateSumarCalculations()});
+      el.addEventListener('blur',()=>{if(el.value.trim())sumarFormatGain(el)});
+    });
+    updateSumarCalculations();
+  }
+  function calculateSumarDraft(){
+    const current=sumarParseMoney('sumarCurrentBalance'),out=new Array(sumarDraft.length).fill(null);if(!current)return out;
+    let end=current;
+    for(let i=sumarDraft.length-1;i>=0;i--){
+      const g=sumarDraft[i].gain;if(g==null||!Number.isFinite(g)){end=null;continue}if(end==null)continue;
+      const start=end-g;if(start<=0){end=null;continue}
+      out[i]={start,end,gain:g,daily:g/start,ea:sumarEA(g/start)};end=start;
+    }return out;
+  }
+  function updateSumarCalculations(){
+    const intervals=calculateSumarDraft(),valid=intervals.filter(Boolean);
+    $('sumarFilled').textContent=`${valid.length} / ${sumarDraft.length}`;
+    intervals.forEach((x,i)=>{
+      $('sumarStart_'+i).textContent=x?sumarMoney2(x.start):'—';$('sumarEnd_'+i).textContent=x?sumarMoney2(x.end):'—';
+      $('sumarDaily_'+i).textContent=x?sumarPct(x.daily):'—';$('sumarEA_'+i).textContent=x?sumarPct(x.ea):'—';
+    });
+    const current=sumarParseMoney('sumarCurrentBalance');$('sumarCurrent').textContent=current?money(current):'—';
+    if(!valid.length){
+      $('sumarStatus').textContent='Ingresa los rendimientos para calcular.';
+      $('sumarInitialCalc').textContent='—';$('sumarInitialShown').textContent='—';$('sumarDifference').textContent='—';$('sumarTotalGain').textContent='—';
+    }else{
+      const initial=valid[0].start,total=valid.reduce((a,x)=>a+x.gain,0),real=sumarParseMoney('sumarInitialReal'),diff=real?real-initial:null;
+      $('sumarInitialCalc').textContent=money(initial);$('sumarInitialShown').textContent=real?money(real):'No ingresado';
+      $('sumarDifference').textContent=diff===null?'—':money(diff);$('sumarTotalGain').textContent=money(total);
+      $('sumarStatus').textContent=`${valid.length} de ${sumarDraft.length} rendimientos calculados.`;
+      $('sumarCheckMessage').textContent=diff===null?'Ingresa el saldo inicial real para comprobar el tramo.':Math.abs(diff)<0.01?'✅ El saldo inicial real coincide con el reconstruido.':`⚠️ Diferencia: ${money(diff)}. Revisa los rendimientos ingresados.`;
+    }
+    function windowEA(arr){if(!arr.length)return'—';let f=1;arr.forEach(x=>f*=1+x.daily);return sumarPct(Math.pow(f,365/arr.length)-1)}
+    $('sumarEA7').textContent=windowEA(valid.slice(-7));$('sumarEA15').textContent=windowEA(valid.slice(-15));$('sumarEA30').textContent=windowEA(valid);
+  }
+  function saveSumarCheck(){
+    const date=$('sumarCurrentDate').value,balance=sumarParseMoney('sumarCurrentBalance'),intervals=calculateSumarDraft();
+    if(!date||!balance){$('sumarError').textContent='Ingresa la fecha y el saldo actual.';return}
+    if(!sumarDraft.some(x=>x.gain!=null)){$('sumarError').textContent='Ingresa al menos un rendimiento.';return}
+    const real=sumarParseMoney('sumarInitialReal');
+    const record={id:Date.now(),date,balance,days:sumarDraft.length,initialReal:real||null,rows:sumarDraft.map((r,i)=>({date:r.date,gain:r.gain,calc:intervals[i]?{start:intervals[i].start,end:intervals[i].end,daily:intervals[i].daily,ea:intervals[i].ea}:null}))};
+    const h=getSumar();h.push(record);saveSumarData(h);renderSavedSumarHistory();$('sumarStatus').textContent='Tramo guardado en el historial.';
+  }
+  function renderSavedSumarHistory(){
+    const box=$('sumarSavedHistory'),history=getSumar().slice().reverse();
+    if(!history.length){box.innerHTML='<div class="history-empty">Todavía no hay tramos guardados.</div>';return}
+    box.innerHTML=history.map((r,ri)=>{
+      const valid=r.rows.filter(x=>x.gain!=null&&x.calc),initial=valid.length?valid[0].calc.start:null,total=valid.reduce((a,x)=>a+x.gain,0);
+      let f=1;valid.forEach(x=>f*=1+x.calc.daily);const ea=valid.length?sumarPct(Math.pow(f,365/valid.length)-1):'—',diff=r.initialReal&&initial?r.initialReal-initial:null;
+      return `<div class="saved-sumar"><div class="section-head"><div><strong>${sumarDateFmt(r.date)} · ${r.days} días</strong><div class="small">Saldo final ${money(r.balance)} · ${valid.length} rendimientos</div></div><button class="delete-history" data-sumar-delete="${history.length-1-ri}" title="Eliminar">×</button></div>
+      <div class="small" style="margin-top:7px">Saldo inicial reconstruido: <strong>${initial?money(initial):'—'}</strong> · Rendimiento: <strong>${money(total)}</strong> · E.A.: <strong>${ea}</strong></div>
+      ${r.initialReal?`<div class="small" style="margin-top:4px">Saldo inicial real: <strong>${money(r.initialReal)}</strong> · Diferencia: <strong>${money(diff)}</strong></div>`:''}
+      <details style="margin-top:8px"><summary>Ver detalle del tramo</summary><div class="table-scroll"><table><thead><tr><th>Fecha</th><th>Saldo inicial</th><th>Rend.</th><th>Saldo final</th><th>Rent. diaria</th><th>E.A.</th></tr></thead><tbody>
+      ${r.rows.filter(x=>x.gain!=null&&x.calc).map(x=>`<tr><td>${sumarDateFmt(x.date)}</td><td>${sumarMoney2(x.calc.start)}</td><td>${sumarMoney2(x.gain)}</td><td>${sumarMoney2(x.calc.end)}</td><td>${sumarPct(x.calc.daily)}</td><td>${sumarPct(x.calc.ea)}</td></tr>`).join('')}
+      </tbody></table></div></details></div>`;
+    }).join('');
+    box.querySelectorAll('[data-sumar-delete]').forEach(btn=>btn.addEventListener('click',()=>{const i=Number(btn.dataset.sumarDelete),h=getSumar();if(h[i]&&confirm('¿Eliminar este tramo de Sumar?')){h.splice(i,1);saveSumarData(h);renderSavedSumarHistory()}}));
+  }
+
+
 
 
  const HISTORY_KEY='simulador_fic_cdt_historial_v1';
