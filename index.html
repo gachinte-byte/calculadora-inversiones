@@ -60,12 +60,24 @@ th{font-size:11px;color:#66717d}
 .delete-history:hover{background:#f1f3f5;color:#18212b}
 .edit-history{width:36px;height:36px;flex:0 0 36px;border:1px solid #d7dce0;border-radius:9px;background:#fff;color:#18212b;font-size:18px;line-height:1;cursor:pointer}.edit-history:hover{background:#f1f3f5}
 
-  .sumar-input-table .input-wrap.table-input{margin:0;min-width:130px;height:42px}
-  .sumar-input-table .input-wrap.table-input input{height:40px;font-size:14px}
-  .saved-sumar{border:1px solid #dfe4e8;border-radius:14px;padding:14px;margin-bottom:10px;background:#fff}
-  .saved-sumar summary{cursor:pointer;color:#18212b;font-weight:700}
-
-  #sumarDays{width:100%;height:48px;border:1px solid #cbd2d9;border-radius:11px;padding:0 13px;font-size:17px;background:#fff;color:#18212b}
+/* Sumar - cuentas independientes */
+.sumar-account-bar{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
+.sumar-account-select{flex:1;min-width:220px}
+.sumar-account-actions{display:flex;gap:8px;flex-wrap:wrap}
+.sumar-account-actions button{white-space:nowrap}
+.sumar-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:12px}
+.sumar-mini{border:1px solid #e1e6ea;border-radius:12px;padding:12px;background:#fff}
+.sumar-mini .k{font-size:12px;color:#66717d;margin-bottom:5px}
+.sumar-mini .v{font-size:19px;font-weight:750;color:#18212b}
+.sumar-input-table .input-wrap.table-input{margin:0;min-width:130px;height:42px}
+.sumar-input-table .input-wrap.table-input input{height:40px;font-size:14px}
+.saved-sumar{border:1px solid #dfe4e8;border-radius:14px;padding:14px;margin-bottom:10px;background:#fff}
+#sumarAccountSelect{width:100%}
+@media(max-width:700px){
+  .sumar-summary-grid{grid-template-columns:1fr 1fr}
+  .sumar-account-actions{width:100%}
+  .sumar-account-actions button{flex:1}
+}
 </style>
 </head>
 <body>
@@ -164,61 +176,95 @@ th{font-size:11px;color:#66717d}
   <section id="sumar" class="page">
     <div class="card">
       <div class="section-head">
-        <div><h2 style="margin:0">Seguimiento Sumar</h2><div class="small">Analiza de 1 a 15 días usando únicamente los rendimientos reales que te informa Sumar.</div></div>
+        <div>
+          <h2 style="margin:0">Sumar · Cuentas</h2>
+          <div class="small">Lleva cada cuenta por separado. Solo ingresas el saldo final.</div>
+        </div>
         <div class="pill">REAL</div>
       </div>
     </div>
-    <div class="hero-result">
-      <div class="hero-label">SALDO ACTUAL</div>
-      <div class="hero-value" id="sumarCurrent">$—</div>
-      <div class="hero-gain" id="sumarStatus">Ingresa el saldo actual y selecciona los días.</div>
-    </div>
+
     <div class="card">
-      <h3 style="margin-top:0">Datos de referencia</h3>
-      <label for="sumarCurrentDate">Fecha del saldo actual</label>
-      <div class="input-wrap"><input id="sumarCurrentDate" type="date"></div>
-      <label for="sumarCurrentBalance">Saldo actual de Sumar</label>
-      <div class="input-wrap"><span class="prefix">$</span><input id="sumarCurrentBalance" type="text" inputmode="numeric" autocomplete="off" placeholder="41.988.911"></div>
-      <label for="sumarDays">Días a analizar</label>
-      <div class="input-wrap"><select id="sumarDays"></select></div>
-      <label for="sumarInitialReal">Saldo inicial real (opcional)</label>
-      <div class="input-wrap"><span class="prefix">$</span><input id="sumarInitialReal" type="text" inputmode="numeric" autocomplete="off" placeholder="Saldo que realmente tenías al inicio"></div>
-      <div class="small">Sirve para comprobar que los rendimientos ingresados reconstruyen correctamente el saldo inicial.</div>
-      <button class="primary" id="buildSumarTable" type="button">MOSTRAR DÍAS</button>
+      <h3 style="margin-top:0">Cuenta / inversión</h3>
+      <div class="sumar-account-bar">
+        <div class="sumar-account-select">
+          <label for="sumarAccountSelect">Cuenta</label>
+          <div class="input-wrap"><select id="sumarAccountSelect"></select></div>
+        </div>
+        <div class="sumar-account-actions">
+          <button class="secondary" id="sumarAddAccount" type="button">+ AGREGAR</button>
+          <button class="secondary" id="sumarRenameAccount" type="button">RENOMBRAR</button>
+          <button class="secondary" id="sumarDeleteAccount" type="button">ELIMINAR</button>
+        </div>
+      </div>
+
+      <div class="sumar-summary-grid">
+        <div class="sumar-mini"><div class="k">Saldo actual</div><div class="v" id="sumarAccountBalance">—</div></div>
+        <div class="sumar-mini"><div class="k">Rendimiento último</div><div class="v" id="sumarAccountGain">—</div></div>
+        <div class="sumar-mini"><div class="k">Promedio diario</div><div class="v" id="sumarAccountAvg">—</div></div>
+        <div class="sumar-mini"><div class="k">E.A. estimada</div><div class="v" id="sumarAccountEA">—</div></div>
+      </div>
     </div>
+
+    <div class="hero-result">
+      <div class="hero-label">SALDO DE LA CUENTA SELECCIONADA</div>
+      <div class="hero-value" id="sumarCurrent">$—</div>
+      <div class="hero-gain" id="sumarStatus">Registra un saldo para comenzar.</div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">Registrar saldo</h3>
+      <div class="small" style="margin-bottom:12px">
+        Cada vez que consultes Sumar, escribe el saldo final. La app lo compara con el último saldo registrado de esa cuenta.
+        Si pasan varios días, calcula el rendimiento acumulado y la tasa equivalente del período.
+      </div>
+
+      <label for="sumarCurrentDate">Fecha</label>
+      <div class="input-wrap"><input id="sumarCurrentDate" type="date"></div>
+
+      <label for="sumarCurrentBalance">Saldo final</label>
+      <div class="input-wrap"><span class="prefix">$</span><input id="sumarCurrentBalance" type="text" inputmode="numeric" autocomplete="off" placeholder="25.007.000"></div>
+
+      <button class="primary" id="saveSumarDaily" type="button">GUARDAR SALDO</button>
+      <div id="sumarError" class="err"></div>
+    </div>
+
     <div class="card">
       <div class="section-head">
-        <div><h3 style="margin:0">Rendimientos diarios</h3><div class="small">Aquí solo escribes el rendimiento en pesos que muestra Sumar.</div></div>
-        <div class="pill" id="sumarFilled">0 / 1</div>
+        <div>
+          <h3 style="margin:0">Historial de la cuenta</h3>
+          <div class="small">Cada saldo se compara con el anterior. No necesitas registrar todos los días.</div>
+        </div>
+        <div class="pill" id="sumarRowsCount">0 registros</div>
       </div>
+
       <div class="table-scroll">
         <table class="sumar-input-table">
-          <thead><tr><th>Día</th><th>Fecha</th><th>Saldo inicial</th><th>Rendimiento</th><th>Saldo final</th><th>Rent. diaria</th><th>E.A.</th></tr></thead>
-          <tbody id="sumarInputBody"></tbody>
+          <thead>
+            <tr>
+              <th>Fecha</th><th>Días</th><th>Saldo final</th><th>Rendimiento</th><th>Prom. diario</th><th>E.A.</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="sumarDailyBody"></tbody>
         </table>
       </div>
-      <div id="sumarError" class="err"></div>
-      <button class="primary" id="saveSumarHistory" type="button">GUARDAR TRAMO EN HISTORIAL</button>
     </div>
+
     <div class="card">
-      <h3 style="margin-top:0">Comprobación del tramo</h3>
+      <h3 style="margin-top:0">Resumen del período</h3>
       <div class="results" style="margin-top:0">
-        <div class="result"><div class="k">Saldo inicial reconstruido</div><div class="v" id="sumarInitialCalc">—</div></div>
-        <div class="result"><div class="k">Saldo inicial real</div><div class="v" id="sumarInitialShown">—</div></div>
-        <div class="result"><div class="k">Diferencia</div><div class="v" id="sumarDifference">—</div></div>
-        <div class="result"><div class="k">Rendimiento del tramo</div><div class="v" id="sumarTotalGain">—</div></div>
+        <div class="result"><div class="k">Rendimiento total</div><div class="v" id="sumarPeriodGain">—</div></div>
+        <div class="result"><div class="k">Promedio diario</div><div class="v" id="sumarPeriodAvg">—</div></div>
+        <div class="result"><div class="k">E.A. equivalente</div><div class="v" id="sumarPeriodEA">—</div></div>
+        <div class="result"><div class="k">Días entre primer y último saldo</div><div class="v" id="sumarPeriodDays">—</div></div>
       </div>
-      <div class="note" id="sumarCheckMessage">El saldo inicial reconstruido se obtiene restando hacia atrás los rendimientos desde el saldo actual.</div>
     </div>
-    <div class="results">
-      <div class="result"><div class="k">E.A. últimos 7 días disponibles</div><div class="v" id="sumarEA7">—</div></div>
-      <div class="result"><div class="k">E.A. últimos 15 días disponibles</div><div class="v" id="sumarEA15">—</div></div>
-      <div class="result"><div class="k">E.A. tramo completo</div><div class="v" id="sumarEA30">—</div></div>
-    </div>
+
     <div class="card">
       <h3 style="margin-top:0">Historial de tramos</h3>
-      <div class="small" style="margin-bottom:12px">Cada análisis guardado queda almacenado en este dispositivo para compararlo más adelante.</div>
-      <div id="sumarSavedHistory"></div>
+      <div class="small" style="margin-bottom:12px">Cada tramo queda asociado únicamente a la cuenta seleccionada.</div>
+      <button class="primary" id="saveSumarTramo" type="button">GUARDAR TRAMO ACTUAL</button>
+      <div id="sumarSavedHistory" style="margin-top:12px"></div>
     </div>
   </section>
 
@@ -329,105 +375,193 @@ th{font-size:11px;color:#66717d}
        `<div class="scenario"><strong>${rr.toFixed(2)}%</strong><span>Ganancia neta<br>${money(n)}</span></div>`);
    });
  }
-  const SUMAR_KEY='gaachinte_sumar_tramos_integrado_v1';
-  let sumarDraft=[];
 
-  function getSumar(){try{const x=JSON.parse(localStorage.getItem(SUMAR_KEY)||'[]');return Array.isArray(x)?x:[]}catch(e){return[]}}
-  function saveSumarData(x){try{localStorage.setItem(SUMAR_KEY,JSON.stringify(x))}catch(e){}}
+
+ 
+  /* ================= SUMAR · CUENTAS ================= */
+  const SUMAR_KEY='gaachinte_sumar_cuentas_v1';
+  const SUMAR_TRAMOS_KEY='gaachinte_sumar_tramos_cuentas_v1';
+  let sumarAccounts=[];
+  let sumarSelectedId=null;
+
+  function sumarLoadAccounts(){
+    try{sumarAccounts=JSON.parse(localStorage.getItem(SUMAR_KEY)||'[]')}catch(e){sumarAccounts=[]}
+    if(!Array.isArray(sumarAccounts)||!sumarAccounts.length){
+      sumarAccounts=[{id:'default',name:'Sumar principal',rows:[]}];
+      sumarSelectedId='default';
+      sumarSaveAccounts();
+    }
+    if(!sumarSelectedId||!sumarAccounts.some(a=>a.id===sumarSelectedId))sumarSelectedId=sumarAccounts[0].id;
+  }
+  function sumarSaveAccounts(){try{localStorage.setItem(SUMAR_KEY,JSON.stringify(sumarAccounts))}catch(e){}}
+  function sumarGetAccount(){return sumarAccounts.find(a=>a.id===sumarSelectedId)||null}
+  function sumarGetTramos(){try{const x=JSON.parse(localStorage.getItem(SUMAR_TRAMOS_KEY)||'[]');return Array.isArray(x)?x:[]}catch(e){return[]}}
+  function sumarSaveTramos(x){try{localStorage.setItem(SUMAR_TRAMOS_KEY,JSON.stringify(x))}catch(e){}}
   function sumarParseMoney(id){const raw=$(id).value.replace(/\D/g,'');return raw?Number(raw):0}
   function sumarFormatMoney(id){const n=sumarParseMoney(id);$(id).value=n?new Intl.NumberFormat('es-CO',{maximumFractionDigits:0}).format(n):''}
-  function sumarParseGain(v){const raw=String(v||'').trim().replace(/\$/g,'').replace(/\s/g,'').replace(/\./g,'').replace(',','.').replace(/[^\d.-]/g,'');const n=Number(raw);return Number.isFinite(n)?n:null}
-  function sumarFormatGain(el){const n=sumarParseGain(el.value);if(n!==null)el.value=new Intl.NumberFormat('es-CO',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n)}
   function sumarDateNow(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
   function sumarDateFmt(s){if(!s)return'—';const [y,m,d]=s.split('-');return `${d}/${m}/${y}`}
-  function sumarAddDays(s,n){const d=new Date(s+'T12:00:00');d.setDate(d.getDate()+n);return sumarDateNow(d)}
   function sumarMoney2(n){return new Intl.NumberFormat('es-CO',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n)}
   function sumarPct(n){return new Intl.NumberFormat('es-CO',{minimumFractionDigits:2,maximumFractionDigits:2}).format(n*100)+'%'}
+  function sumarDaysBetween(a,b){return Math.max(1,Math.round((new Date(b+'T12:00:00')-new Date(a+'T12:00:00'))/86400000))}
   function sumarEA(d){return Math.pow(1+d,365)-1}
 
-  function initSumarDays(){
-    const s=$('sumarDays');s.innerHTML='';
-    for(let i=1;i<=15;i++){const o=document.createElement('option');o.value=i;o.textContent=i+(i===1?' día':' días');s.appendChild(o)}
+  function renderSumarAccounts(){
+    const s=$('sumarAccountSelect');
+    s.innerHTML=sumarAccounts.map(a=>`<option value="${a.id}">${a.name}</option>`).join('');
+    s.value=sumarSelectedId;
+    renderSumarAccountSummary();
   }
-  function buildSumarTable(){
-    const date=$('sumarCurrentDate').value,balance=sumarParseMoney('sumarCurrentBalance'),days=Number($('sumarDays').value);
-    if(!date||!balance){$('sumarError').textContent='Ingresa la fecha y el saldo actual.';return}
-    $('sumarError').textContent='';
-    const old={};sumarDraft.forEach(x=>old[x.date]=x);sumarDraft=[];
-    for(let i=days;i>=1;i--){const d=sumarAddDays(date,-i);sumarDraft.push({date:d,gain:old[d]?.gain??null})}
-    renderSumarTable();
+
+  function renderSumarAccountSummary(){
+    const a=sumarGetAccount();
+    const rows=(a?.rows||[]).slice().sort((x,y)=>x.date.localeCompare(y.date));
+    const last=rows[rows.length-1];
+    $('sumarAccountBalance').textContent=last?money(last.balance):'—';
+    $('sumarAccountGain').textContent=last?.gain!=null?money2(last.gain):'—';
+    const gains=rows.filter(x=>x.gain!=null);
+    $('sumarAccountAvg').textContent=gains.length?money2(gains.reduce((s,x)=>s+x.gain,0)/gains.length):'—';
+    $('sumarAccountEA').textContent=last?.ea!=null?sumarPct(last.ea):'—';
   }
-  function renderSumarTable(){
-    const body=$('sumarInputBody');
-    $('sumarFilled').textContent=`${sumarDraft.filter(x=>x.gain!=null).length} / ${sumarDraft.length}`;
-    body.innerHTML=sumarDraft.map((r,i)=>`
-      <tr><td>${i+1}</td><td>${sumarDateFmt(r.date)}</td><td id="sumarStart_${i}">—</td>
-      <td><div class="input-wrap table-input"><span class="prefix">$</span><input class="sumar-gain" data-i="${i}" type="text" inputmode="decimal" placeholder="0,00" value="${r.gain!=null?sumarMoney2(r.gain):''}"></div></td>
-      <td id="sumarEnd_${i}">—</td><td id="sumarDaily_${i}">—</td><td id="sumarEA_${i}">—</td></tr>`).join('');
-    body.querySelectorAll('.sumar-gain').forEach(el=>{
-      el.addEventListener('input',()=>{const i=Number(el.dataset.i);sumarDraft[i].gain=sumarParseGain(el.value);updateSumarCalculations()});
-      el.addEventListener('blur',()=>{if(el.value.trim())sumarFormatGain(el)});
+
+  function sumarRecalculate(a){
+    a.rows.sort((x,y)=>x.date.localeCompare(y.date));
+    a.rows.forEach((r,i)=>{
+      if(i===0){r.days=null;r.gain=null;r.avg=null;r.ea=null;return}
+      const p=a.rows[i-1];
+      const days=sumarDaysBetween(p.date,r.date);
+      const gain=r.balance-p.balance;
+      r.days=days;
+      r.gain=gain;
+      r.avg=gain/days;
+      r.ea=p.balance>0?sumarEA(Math.pow(r.balance/p.balance,1/days)-1):null;
     });
-    updateSumarCalculations();
   }
-  function calculateSumarDraft(){
-    const current=sumarParseMoney('sumarCurrentBalance'),out=new Array(sumarDraft.length).fill(null);if(!current)return out;
-    let end=current;
-    for(let i=sumarDraft.length-1;i>=0;i--){
-      const g=sumarDraft[i].gain;if(g==null||!Number.isFinite(g)){end=null;continue}if(end==null)continue;
-      const start=end-g;if(start<=0){end=null;continue}
-      out[i]={start,end,gain:g,daily:g/start,ea:sumarEA(g/start)};end=start;
-    }return out;
+
+  function renderSumarDaily(){
+    const a=sumarGetAccount();
+    const rows=(a?.rows||[]).slice().sort((x,y)=>x.date.localeCompare(y.date));
+    $('sumarRowsCount').textContent=`${rows.length} registro${rows.length===1?'':'s'}`;
+    $('sumarDailyBody').innerHTML=rows.length
+      ?rows.map(r=>`<tr>
+          <td>${sumarDateFmt(r.date)}</td>
+          <td>${r.days?`${r.days} día${r.days===1?'':'s'}`:'—'}</td>
+          <td>${money(r.balance)}</td>
+          <td>${r.gain!=null?money2(r.gain):'—'}</td>
+          <td>${r.avg!=null?money2(r.avg):'—'}</td>
+          <td>${r.ea!=null?sumarPct(r.ea):'—'}</td>
+          <td><button class="delete-history" data-sumar-row="${r.id}" title="Eliminar">×</button></td>
+        </tr>`).join('')
+      :'<tr><td colspan="7" class="history-empty">Todavía no hay saldos registrados para esta cuenta.</td></tr>';
+
+    $('sumarDailyBody').querySelectorAll('[data-sumar-row]').forEach(btn=>btn.addEventListener('click',()=>{
+      const a=sumarGetAccount(),id=Number(btn.dataset.sumarRow);
+      if(a&&confirm('¿Eliminar este registro?')){
+        a.rows=a.rows.filter(r=>r.id!==id);
+        sumarRecalculate(a);sumarSaveAccounts();
+        renderSumarDaily();renderSumarAccountSummary();renderSumarPeriod();renderSavedSumarHistory();
+      }
+    }));
   }
-  function updateSumarCalculations(){
-    const intervals=calculateSumarDraft(),valid=intervals.filter(Boolean);
-    $('sumarFilled').textContent=`${valid.length} / ${sumarDraft.length}`;
-    intervals.forEach((x,i)=>{
-      $('sumarStart_'+i).textContent=x?sumarMoney2(x.start):'—';$('sumarEnd_'+i).textContent=x?sumarMoney2(x.end):'—';
-      $('sumarDaily_'+i).textContent=x?sumarPct(x.daily):'—';$('sumarEA_'+i).textContent=x?sumarPct(x.ea):'—';
-    });
-    const current=sumarParseMoney('sumarCurrentBalance');$('sumarCurrent').textContent=current?money(current):'—';
-    if(!valid.length){
-      $('sumarStatus').textContent='Ingresa los rendimientos para calcular.';
-      $('sumarInitialCalc').textContent='—';$('sumarInitialShown').textContent='—';$('sumarDifference').textContent='—';$('sumarTotalGain').textContent='—';
-    }else{
-      const initial=valid[0].start,total=valid.reduce((a,x)=>a+x.gain,0),real=sumarParseMoney('sumarInitialReal'),diff=real?real-initial:null;
-      $('sumarInitialCalc').textContent=money(initial);$('sumarInitialShown').textContent=real?money(real):'No ingresado';
-      $('sumarDifference').textContent=diff===null?'—':money(diff);$('sumarTotalGain').textContent=money(total);
-      $('sumarStatus').textContent=`${valid.length} de ${sumarDraft.length} rendimientos calculados.`;
-      $('sumarCheckMessage').textContent=diff===null?'Ingresa el saldo inicial real para comprobar el tramo.':Math.abs(diff)<0.01?'✅ El saldo inicial real coincide con el reconstruido.':`⚠️ Diferencia: ${money(diff)}. Revisa los rendimientos ingresados.`;
+
+  function renderSumarPeriod(){
+    const a=sumarGetAccount();
+    const rows=(a?.rows||[]).slice().sort((x,y)=>x.date.localeCompare(y.date));
+    if(rows.length<2){
+      $('sumarPeriodGain').textContent='—';
+      $('sumarPeriodAvg').textContent='—';
+      $('sumarPeriodEA').textContent='—';
+      $('sumarPeriodDays').textContent=rows.length?'1':'—';
+      $('sumarCurrent').textContent=rows.length?money(rows[rows.length-1].balance):'—';
+      return;
     }
-    function windowEA(arr){if(!arr.length)return'—';let f=1;arr.forEach(x=>f*=1+x.daily);return sumarPct(Math.pow(f,365/arr.length)-1)}
-    $('sumarEA7').textContent=windowEA(valid.slice(-7));$('sumarEA15').textContent=windowEA(valid.slice(-15));$('sumarEA30').textContent=windowEA(valid);
+    const first=rows[0],last=rows[rows.length-1];
+    const days=sumarDaysBetween(first.date,last.date);
+    const gain=last.balance-first.balance;
+    const rate=first.balance>0?Math.pow(last.balance/first.balance,1/days)-1:0;
+    $('sumarPeriodGain').textContent=money(gain);
+    $('sumarPeriodAvg').textContent=money2(gain/days);
+    $('sumarPeriodEA').textContent=sumarPct(sumarEA(rate));
+    $('sumarPeriodDays').textContent=days;
+    $('sumarCurrent').textContent=money(last.balance);
+    $('sumarStatus').textContent=`Último saldo registrado: ${sumarDateFmt(last.date)}.`;
   }
-  function saveSumarCheck(){
-    const date=$('sumarCurrentDate').value,balance=sumarParseMoney('sumarCurrentBalance'),intervals=calculateSumarDraft();
-    if(!date||!balance){$('sumarError').textContent='Ingresa la fecha y el saldo actual.';return}
-    if(!sumarDraft.some(x=>x.gain!=null)){$('sumarError').textContent='Ingresa al menos un rendimiento.';return}
-    const real=sumarParseMoney('sumarInitialReal');
-    const record={id:Date.now(),date,balance,days:sumarDraft.length,initialReal:real||null,rows:sumarDraft.map((r,i)=>({date:r.date,gain:r.gain,calc:intervals[i]?{start:intervals[i].start,end:intervals[i].end,daily:intervals[i].daily,ea:intervals[i].ea}:null}))};
-    const h=getSumar();h.push(record);saveSumarData(h);renderSavedSumarHistory();$('sumarStatus').textContent='Tramo guardado en el historial.';
+
+  function saveSumarDaily(){
+    const a=sumarGetAccount(),date=$('sumarCurrentDate').value,balance=sumarParseMoney('sumarCurrentBalance');
+    if(!a||!date||!balance){$('sumarError').textContent='Ingresa la fecha y el saldo final.';return}
+    const existing=a.rows.find(r=>r.date===date);
+    if(existing){
+      if(!confirm('Ya existe un saldo para esta fecha. ¿Reemplazarlo?'))return;
+      existing.balance=balance;
+    }else{
+      a.rows.push({id:Date.now(),date,balance});
+    }
+    sumarRecalculate(a);
+    sumarSaveAccounts();
+    renderSumarDaily();renderSumarAccountSummary();renderSumarPeriod();renderSavedSumarHistory();
+    $('sumarCurrentBalance').value='';
+    $('sumarError').textContent='';
+    $('sumarStatus').textContent='Saldo guardado correctamente.';
   }
+
+  function addSumarAccount(){
+    const name=prompt('Nombre de la nueva cuenta o inversión:','Sumar – Banco de Bogotá');
+    if(!name||!name.trim())return;
+    sumarSelectedId='acc_'+Date.now();
+    sumarAccounts.push({id:sumarSelectedId,name:name.trim(),rows:[]});
+    sumarSaveAccounts();renderSumarAccounts();renderSumarDaily();renderSumarPeriod();renderSavedSumarHistory();
+  }
+
+  function renameSumarAccount(){
+    const a=sumarGetAccount();
+    if(!a)return;
+    const name=prompt('Nuevo nombre de la cuenta:',a.name);
+    if(!name||!name.trim())return;
+    a.name=name.trim();
+    sumarSaveAccounts();renderSumarAccounts();renderSavedSumarHistory();
+  }
+
+  function deleteSumarAccount(){
+    if(sumarAccounts.length<=1){alert('Debes conservar al menos una cuenta.');return}
+    const a=sumarGetAccount();
+    if(a&&confirm(`¿Eliminar "${a.name}" y todos sus registros?`)){
+      sumarAccounts=sumarAccounts.filter(x=>x.id!==a.id);
+      sumarSelectedId=sumarAccounts[0].id;
+      sumarSaveAccounts();renderSumarAccounts();renderSumarDaily();renderSumarPeriod();renderSavedSumarHistory();
+    }
+  }
+
+  function saveSumarTramo(){
+    const a=sumarGetAccount();
+    const rows=(a?.rows||[]).slice().sort((x,y)=>x.date.localeCompare(y.date));
+    if(!a||rows.length<2){$('sumarError').textContent='Necesitas al menos dos saldos registrados.';return}
+    const first=rows[0],last=rows[rows.length-1],days=sumarDaysBetween(first.date,last.date);
+    const gain=last.balance-first.balance;
+    const rate=first.balance>0?Math.pow(last.balance/first.balance,1/days)-1:0;
+    const h=sumarGetTramos();
+    h.push({id:Date.now(),accountId:a.id,accountName:a.name,startDate:first.date,endDate:last.date,startBalance:first.balance,endBalance:last.balance,days,gain,avg:gain/days,ea:sumarEA(rate)});
+    sumarSaveTramos(h);renderSavedSumarHistory();$('sumarStatus').textContent='Tramo guardado en el historial.';
+  }
+
   function renderSavedSumarHistory(){
-    const box=$('sumarSavedHistory'),history=getSumar().slice().reverse();
-    if(!history.length){box.innerHTML='<div class="history-empty">Todavía no hay tramos guardados.</div>';return}
-    box.innerHTML=history.map((r,ri)=>{
-      const valid=r.rows.filter(x=>x.gain!=null&&x.calc),initial=valid.length?valid[0].calc.start:null,total=valid.reduce((a,x)=>a+x.gain,0);
-      let f=1;valid.forEach(x=>f*=1+x.calc.daily);const ea=valid.length?sumarPct(Math.pow(f,365/valid.length)-1):'—',diff=r.initialReal&&initial?r.initialReal-initial:null;
-      return `<div class="saved-sumar"><div class="section-head"><div><strong>${sumarDateFmt(r.date)} · ${r.days} días</strong><div class="small">Saldo final ${money(r.balance)} · ${valid.length} rendimientos</div></div><button class="delete-history" data-sumar-delete="${history.length-1-ri}" title="Eliminar">×</button></div>
-      <div class="small" style="margin-top:7px">Saldo inicial reconstruido: <strong>${initial?money(initial):'—'}</strong> · Rendimiento: <strong>${money(total)}</strong> · E.A.: <strong>${ea}</strong></div>
-      ${r.initialReal?`<div class="small" style="margin-top:4px">Saldo inicial real: <strong>${money(r.initialReal)}</strong> · Diferencia: <strong>${money(diff)}</strong></div>`:''}
-      <details style="margin-top:8px"><summary>Ver detalle del tramo</summary><div class="table-scroll"><table><thead><tr><th>Fecha</th><th>Saldo inicial</th><th>Rend.</th><th>Saldo final</th><th>Rent. diaria</th><th>E.A.</th></tr></thead><tbody>
-      ${r.rows.filter(x=>x.gain!=null&&x.calc).map(x=>`<tr><td>${sumarDateFmt(x.date)}</td><td>${sumarMoney2(x.calc.start)}</td><td>${sumarMoney2(x.gain)}</td><td>${sumarMoney2(x.calc.end)}</td><td>${sumarPct(x.calc.daily)}</td><td>${sumarPct(x.calc.ea)}</td></tr>`).join('')}
-      </tbody></table></div></details></div>`;
-    }).join('');
-    box.querySelectorAll('[data-sumar-delete]').forEach(btn=>btn.addEventListener('click',()=>{const i=Number(btn.dataset.sumarDelete),h=getSumar();if(h[i]&&confirm('¿Eliminar este tramo de Sumar?')){h.splice(i,1);saveSumarData(h);renderSavedSumarHistory()}}));
+    const box=$('sumarSavedHistory'),a=sumarGetAccount();
+    const h=sumarGetTramos().filter(x=>x.accountId===a?.id).slice().reverse();
+    if(!h.length){box.innerHTML='<div class="history-empty">No hay tramos guardados para esta cuenta.</div>';return}
+    box.innerHTML=h.map(r=>`<div class="saved-sumar">
+      <div class="section-head">
+        <div><strong>${sumarDateFmt(r.startDate)} → ${sumarDateFmt(r.endDate)}</strong><div class="small">${r.days} días · ${money(r.startBalance)} → ${money(r.endBalance)}</div></div>
+        <button class="delete-history" data-sumar-tramo="${r.id}" title="Eliminar">×</button>
+      </div>
+      <div class="small" style="margin-top:7px">Rendimiento: <strong>${money(r.gain)}</strong> · Promedio diario: <strong>${money2(r.avg)}</strong> · E.A.: <strong>${sumarPct(r.ea)}</strong></div>
+    </div>`).join('');
+    box.querySelectorAll('[data-sumar-tramo]').forEach(btn=>btn.addEventListener('click',()=>{
+      const id=Number(btn.dataset.sumarTramo),x=sumarGetTramos();
+      if(confirm('¿Eliminar este tramo?')){sumarSaveTramos(x.filter(r=>r.id!==id));renderSavedSumarHistory()}
+    }));
   }
 
-
-
-
- const HISTORY_KEY='simulador_fic_cdt_historial_v1';
+const HISTORY_KEY='simulador_fic_cdt_historial_v1';
  function getHistory(){try{return JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]')}catch(e){return[]}}
  function saveHistoryItem(){
    const x=nums(); if(!valid(x)) return;
@@ -464,15 +598,20 @@ th{font-size:11px;color:#66717d}
    }));
  }
  
-  // Inicialización del módulo Sumar
-  initSumarDays();
+  sumarLoadAccounts();
+  renderSumarAccounts();
   $('sumarCurrentDate').value=sumarDateNow(new Date());
-  $('sumarCurrentBalance').addEventListener('input',()=>{sumarFormatMoney('sumarCurrentBalance');updateSumarCalculations()});
-  $('sumarInitialReal').addEventListener('input',()=>{sumarFormatMoney('sumarInitialReal');updateSumarCalculations()});
-  $('sumarDays').addEventListener('change',()=>{if($('sumarCurrentBalance').value)buildSumarTable()});
-  $('buildSumarTable').addEventListener('click',buildSumarTable);
-  $('saveSumarHistory').addEventListener('click',saveSumarCheck);
-  renderSavedSumarHistory();
+  $('sumarAccountSelect').addEventListener('change',()=>{
+    sumarSelectedId=$('sumarAccountSelect').value;
+    renderSumarAccountSummary();renderSumarDaily();renderSumarPeriod();renderSavedSumarHistory();
+  });
+  $('sumarAddAccount').addEventListener('click',addSumarAccount);
+  $('sumarRenameAccount').addEventListener('click',renameSumarAccount);
+  $('sumarDeleteAccount').addEventListener('click',deleteSumarAccount);
+  $('sumarCurrentBalance').addEventListener('input',()=>sumarFormatMoney('sumarCurrentBalance'));
+  $('saveSumarDaily').addEventListener('click',saveSumarDaily);
+  $('saveSumarTramo').addEventListener('click',saveSumarTramo);
+  renderSumarDaily();renderSumarPeriod();renderSavedSumarHistory();
 
   function resetForm(){
    $('capital').value='1.000.000'; $('ea').value='10'; $('days').value='30'; $('ret').value='4';
