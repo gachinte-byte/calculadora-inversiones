@@ -452,86 +452,90 @@ function sCalc(a){
  a.rows.sort((x,y)=>String(x.date).localeCompare(String(y.date)));
 
  /*
-  MOTOR DE RECONSTRUCCIÓN DE SUMAR
+  RECONSTRUCCIÓN ROBUSTA
 
-  Cada fila representa el cierre de un día.
+  Saldo final de un día:
+      saldo anterior + aporte - retiro + rendimiento de ESE día
 
-  HACIA ATRÁS:
-    Si conocemos el saldo de HOY y el rendimiento de AYER:
-      saldo_ayer = saldo_hoy - rendimiento_ayer
-    Si hubo un aporte ayer:
-      saldo_ayer = saldo_hoy - aporte_ayer - rendimiento_ayer
-    Si hubo un retiro ayer:
-      saldo_ayer = saldo_hoy + retiro_ayer - rendimiento_ayer
+  Hacia atrás:
+      saldo anterior =
+        saldo actual - aporte + retiro - rendimiento de ESE día
 
-  HACIA ADELANTE:
-    Si conocemos el saldo de AYER y el rendimiento de HOY:
-      saldo_hoy = saldo_ayer + rendimiento_hoy
-    ajustando aportes/retiros.
+  Por eso el rendimiento que se resta al retroceder es el de la FILA
+  ANTERIOR, no el de la fila actual.
 
-  IMPORTANTE:
-  - Los saldos que el usuario escribe nunca se reemplazan.
-  - Un rendimiento bancario siempre pertenece a la fecha de su propia fila.
-  - Se reconstruyen cadenas completas, no solo una fila.
-  - Solo se reconstruye entre fechas consecutivas (1 día), porque no se
-    puede inventar qué pasó en días intermedios que no tienen registro.
+  Si un día tiene movimiento pero no tiene rendimiento reportado, también
+  podemos calcular su saldo usando el movimiento:
+      saldo actual = saldo anterior + aporte - retiro
+
+  Esto evita que un retiro sea interpretado como rendimiento.
  */
 
  for(let pass=0;pass<50;pass++){
    let changed=false;
 
-   // 1) HACIA ATRÁS.
-   // El rendimiento de la fila PREV es el que se resta al saldo de CUR.
-   for(let i=a.rows.length-1;i>0;i--){
-     const prev=a.rows[i-1];
-     const cur=a.rows[i];
+   // A. HACIA ADELANTE.
+   // Si conocemos el saldo anterior, podemos reconstruir el día actual
+   // aunque ese día solo tenga un movimiento y no tenga rendimiento.
+   for(let i=1;i<a.rows.length;i++){
+     const prev=a.rows[i-1],cur=a.rows[i];
 
-     if(cur.balance==null)continue;
-     if(prev.balance!=null)continue;
-     if(prev.bankGain==null)continue;
+     if(prev.balance==null || cur.balance!=null)continue;
      if(sDays(prev.date,cur.date)!==1)continue;
 
-     let previousBalance=Number(cur.balance);
+     const hasYield=cur.bankGain!=null;
+     const hasMovement=cur.movementType!=='none' && Number(cur.movementAmount||0)!==0;
 
-     if(prev.movementType==='aporte'){
-       previousBalance-=Number(prev.movementAmount||0);
-     }else if(prev.movementType==='retiro'){
-       previousBalance+=Number(prev.movementAmount||0);
-     }
+     if(!hasYield && !hasMovement)continue;
 
-     previousBalance-=Number(prev.bankGain||0);
+     let b=Number(prev.balance);
 
-     if(Number.isFinite(previousBalance)){
-       prev.balance=previousBalance;
-       prev.reconstructed=true;
+     if(cur.movementType==='aporte')
+       b+=Number(cur.movementAmount||0);
+
+     if(cur.movementType==='retiro')
+       b-=Number(cur.movementAmount||0);
+
+     if(hasYield)
+       b+=Number(cur.bankGain||0);
+
+     if(Number.isFinite(b)){
+       cur.balance=b;
+       cur.reconstructed=true;
        changed=true;
      }
    }
 
-   // 2) HACIA ADELANTE.
-   // El rendimiento de la fila CUR se suma al saldo de PREV.
-   for(let i=1;i<a.rows.length;i++){
-     const prev=a.rows[i-1];
-     const cur=a.rows[i];
+   // B. HACIA ATRÁS.
+   // Si conocemos el saldo actual, usamos el rendimiento de la fecha
+   // anterior para reconstruir el saldo anterior.
+   for(let i=a.rows.length-1;i>0;i--){
+     const prev=a.rows[i-1],cur=a.rows[i];
 
-     if(prev.balance==null)continue;
-     if(cur.balance!=null)continue;
-     if(cur.bankGain==null)continue;
+     if(cur.balance==null || prev.balance!=null)continue;
      if(sDays(prev.date,cur.date)!==1)continue;
 
-     let currentBalance=Number(prev.balance);
+     const hasYield=prev.bankGain!=null;
+     const hasMovement=prev.movementType!=='none' && Number(prev.movementAmount||0)!==0;
 
-     if(cur.movementType==='aporte'){
-       currentBalance+=Number(cur.movementAmount||0);
-     }else if(cur.movementType==='retiro'){
-       currentBalance-=Number(cur.movementAmount||0);
-     }
+     if(!hasYield && !hasMovement)continue;
 
-     currentBalance+=Number(cur.bankGain||0);
+     let b=Number(cur.balance);
 
-     if(Number.isFinite(currentBalance)){
-       cur.balance=currentBalance;
-       cur.reconstructed=true;
+     // Revertir el movimiento que ocurrió en la fecha anterior.
+     if(prev.movementType==='aporte')
+       b-=Number(prev.movementAmount||0);
+
+     if(prev.movementType==='retiro')
+       b+=Number(prev.movementAmount||0);
+
+     // Revertir el rendimiento generado en la fecha anterior.
+     if(hasYield)
+       b-=Number(prev.bankGain||0);
+
+     if(Number.isFinite(b)){
+       prev.balance=b;
+       prev.reconstructed=true;
        changed=true;
      }
    }
@@ -539,7 +543,7 @@ function sCalc(a){
    if(!changed)break;
  }
 
- // 3) Cálculos diarios.
+ // Cálculos diarios y E.A.
  a.rows.forEach((r,i)=>{
    r.days=null;
    r.calcGain=null;
@@ -551,29 +555,30 @@ function sCalc(a){
    const days=sDays(prev.date,r.date);
    r.days=days;
 
-   // Diferencia de saldo: útil para comprobar el rendimiento implícito.
-   if(prev.balance!=null&&r.balance!=null){
+   if(prev.balance!=null && r.balance!=null){
      r.calcGain=Number(r.balance)-Number(prev.balance)
        -(r.movementType==='aporte'?Number(r.movementAmount||0):0)
        +(r.movementType==='retiro'?Number(r.movementAmount||0):0);
    }
 
-   // E.A. usando el rendimiento REAL que reportó el banco.
-   if(r.bankGain!=null&&r.balance!=null&&days>0){
+   /*
+    E.A. del rendimiento REAL reportado por el banco.
+    El capital trabajado durante el día es el saldo final antes de sumar
+    el rendimiento, ajustado por el movimiento de ese mismo día.
+   */
+   if(r.bankGain!=null && r.balance!=null && days>0){
      let capital=Number(r.balance);
 
-     // Saldo final - movimiento + retiro - rendimiento = capital que estuvo
-     // trabajando durante ese día.
-     if(r.movementType==='aporte'){
+     if(r.movementType==='aporte')
        capital-=Number(r.movementAmount||0);
-     }else if(r.movementType==='retiro'){
+
+     if(r.movementType==='retiro')
        capital+=Number(r.movementAmount||0);
-     }
 
      capital-=Number(r.bankGain||0);
 
      const gain=Number(r.bankGain);
-     if(capital>0&&1+gain/capital>0){
+     if(capital>0 && 1+gain/capital>0){
        const dailyRate=Math.pow(1+gain/capital,1/days)-1;
        r.ea=sEA(dailyRate);
      }
@@ -586,35 +591,58 @@ function sRender(){
  const a=sAcc(),rows=(a&&a.rows?a.rows:[]).slice().sort((x,y)=>String(x.date).localeCompare(String(y.date)));
  $('sumarRowsCount').textContent=rows.length+' registro'+(rows.length===1?'':'s');
  let out='';
+
  rows.forEach((r,i)=>{
    const p=i>0?rows[i-1]:null;
    const days=r.days||'—';
    const initial=p&&p.balance!=null?Number(p.balance):null;
+
    let mv='—';
    if(r.movementType==='aporte')mv='Aporte<br>'+money(r.movementAmount);
    if(r.movementType==='retiro')mv='Retiro<br>'+money(r.movementAmount);
 
-   let estimatedGain=null, estimatedEA=null;
-   // Only estimate a tramo when BOTH endpoints have known balances and
-   // the current record does not have a bank-reported yield.
+   let estimatedGain=null,estimatedEA=null;
+
+   // Si ambos saldos existen y NO hay rendimiento bancario reportado,
+   // el residual es el rendimiento implícito después de separar el flujo.
    if(r.bankGain==null && initial!=null && r.balance!=null && Number(r.days)>0){
-     const movement = r.movementType==='aporte' ? Number(r.movementAmount||0) :
-                      r.movementType==='retiro' ? -Number(r.movementAmount||0) : 0;
-     estimatedGain = Number(r.balance) - initial - movement;
-     const base = initial + (movement>0?movement:0);
-     const ending = Number(r.balance);
-     if(base>0 && ending>0){
-       estimatedEA=Math.pow(ending/(initial+movement),365/Number(r.days))-1;
+     let movement=0;
+     if(r.movementType==='aporte')movement=Number(r.movementAmount||0);
+     if(r.movementType==='retiro')movement=-Number(r.movementAmount||0);
+
+     estimatedGain=Number(r.balance)-initial-movement;
+
+     const capital=initial+(movement>0?movement:0);
+
+     if(capital>0 && Number(r.balance)>0){
+       // Si hubo retiro, el capital trabajado es el saldo inicial.
+       // Si hubo aporte, usamos el capital después del aporte.
+       const endForRate=Number(r.balance);
+       const baseForRate=r.movementType==='retiro'
+         ? initial
+         : capital;
+
+       if(baseForRate>0){
+         const ratio=(endForRate+(r.movementType==='retiro'?Number(r.movementAmount||0):0))/baseForRate;
+         if(ratio>0){
+           estimatedEA=Math.pow(ratio,365/Number(r.days))-1;
+         }
+       }
      }
    }
 
-   const bal=r.balance==null?'—':money(r.balance)+(r.reconstructed?'<div class="small">estimado</div>':'');
+   const bal=r.balance==null?'—':
+     money(r.balance)+(r.reconstructed?'<div class="small">estimado</div>':'');
    const bank=r.bankGain==null?'—':sM2(r.bankGain);
    const est=estimatedGain==null?'—':sM2(estimatedGain)+'<div class="small">tramo</div>';
-   const avg=r.bankGain!=null&&r.days?sM2(Number(r.bankGain)/Number(r.days)):
-             estimatedGain!=null?sM2(estimatedGain/Number(r.days)):'—';
+
+   const avg=r.bankGain!=null&&r.days
+     ?sM2(Number(r.bankGain)/Number(r.days))
+     :estimatedGain!=null?sM2(estimatedGain/Number(r.days))
+     :'—';
+
    const ea=r.ea!=null?sP(r.ea):
-            estimatedEA!=null?sP(estimatedEA)+'<div class="small">estimada</div>':'—';
+     estimatedEA!=null?sP(estimatedEA)+'<div class="small">estimada</div>':'—';
 
    out+='<tr>'+
      '<td>'+sDF(r.date)+'</td>'+
@@ -629,7 +657,9 @@ function sRender(){
      '<td><button class="delete-history" data-srow="'+r.id+'">×</button></td>'+
    '</tr>';
  });
+
  $('sumarDailyBody').innerHTML=out||'<tr><td colspan="10" class="history-empty">Todavía no hay registros para esta cuenta.</td></tr>';
+
  $('sumarDailyBody').querySelectorAll('[data-srow]').forEach(b=>b.addEventListener('click',()=>{
    const aa=sAcc(),id=Number(b.dataset.srow);
    if(aa&&confirm('¿Eliminar este registro?')){
@@ -638,6 +668,7 @@ function sRender(){
    }
  }));
 }
+
 function sSummary(){
  const a=sAcc();
  const rows=(a&&a.rows?a.rows:[]).slice().sort((x,y)=>String(x.date).localeCompare(String(y.date)));
