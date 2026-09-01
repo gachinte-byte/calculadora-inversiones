@@ -954,41 +954,117 @@ function sTramoSave(){
 function sTramoEA(r){
  const days=Math.max(1,Number(r.days)||sDays(r.startDate,r.endDate));
  const start=Number(r.startBalance),end=Number(r.endBalance);
- const net=Number(r.netMov||0);
+ if(!(start>0&&end>0))return null;
 
- // Sin aportes/retiros: use ONLY the two reliable endpoint balances.
- // This is the key correction for periods with sparse daily data.
- if(net===0 && start>0 && end>0){
-   const ratio=end/start;
-   return ratio>0 ? Math.pow(ratio,365/days)-1 : null;
- }
+ /*
+  RENTABILIDAD E.A. DEL TRAMO
 
- // With movements: calculate a time-weighted/linked return from the
- // subperiod observations, keeping movements outside the return.
- const snap=(r.snapshot||[]).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  La rentabilidad debe medir el comportamiento de la inversión, no el
+  movimiento del dinero retirado/aportado.
+
+  1) Sin movimientos:
+       EA = (saldo final / saldo inicial)^(365/días) - 1
+
+  2) Con movimientos:
+     - Si tenemos rendimientos bancarios diarios, usamos esos rendimientos
+       para obtener las tasas de cada subperíodo, excluyendo completamente
+       el aporte/retiro del capital invertido.
+     - Si faltan rendimientos diarios, usamos los saldos alrededor de cada
+       movimiento y hacemos una cadena de retornos por subperíodos.
+     - Como respaldo para datos muy escasos, usamos Modified Dietz con el
+       peso temporal del flujo. Esto evita que un retiro sea tratado como
+       una pérdida de rentabilidad.
+ */
+
+ const snap=(r.snapshot||[]).slice().sort((x,y)=>String(x.date).localeCompare(String(y.date)));
+
+ // Construye retornos diarios/subperíodos a partir de los datos disponibles.
  const rates=[];
  for(let i=1;i<snap.length;i++){
    const prev=snap[i-1],cur=snap[i];
    if(prev.balance==null||cur.balance==null)continue;
+
    const d=sDays(prev.date,cur.date);
-   let g=cur.bankGain!=null?Number(cur.bankGain):null;
+   if(d<1)continue;
+
    const mv=cur.movementType==='aporte'
       ?Number(cur.movementAmount||0)
       :cur.movementType==='retiro'
         ?-Number(cur.movementAmount||0):0;
-   if(g==null)g=Number(cur.balance)-Number(prev.balance)-mv;
-   let cap=Number(prev.balance);
-   if(cur.movementType==='aporte')cap+=Number(cur.movementAmount||0);
-   if(cap>0 && 1+g/cap>0){
-     const daily=Math.pow(1+g/cap,1/d)-1;
+
+   let gain=cur.bankGain!=null?Number(cur.bankGain):null;
+
+   // Si no hay rendimiento reportado, el cambio de saldo menos el flujo
+   // es el rendimiento implícito del subperíodo.
+   if(gain==null){
+     gain=Number(cur.balance)-Number(prev.balance)-mv;
+   }
+
+   // Capital invertido antes del flujo. El flujo no es rentabilidad.
+   let capital=Number(prev.balance);
+
+   // Para un aporte realizado al inicio del día, el nuevo capital trabaja
+   // durante ese día; si no conocemos la hora, esta es la aproximación.
+   if(cur.movementType==='aporte'){
+     capital+=Number(cur.movementAmount||0);
+   }
+
+   if(capital>0 && 1+gain/capital>0){
+     const daily=Math.pow(1+gain/capital,1/d)-1;
      if(Number.isFinite(daily))rates.push({daily,d});
    }
  }
+
  if(rates.length){
+   // Encadenar retornos: los movimientos no forman parte del retorno.
    let factor=1,totalDays=0;
-   rates.forEach(x=>{factor*=Math.pow(1+x.daily,x.d/365);totalDays+=x.d});
-   if(totalDays>0&&factor>0)return Math.pow(factor,365/totalDays)-1;
+   rates.forEach(x=>{
+     factor*=Math.pow(1+x.daily,x.d/365);
+     totalDays+=x.d;
+   });
+   if(totalDays>0&&factor>0){
+     return Math.pow(factor,365/totalDays)-1;
+   }
  }
+
+ // Respaldo cuando hay movimientos y faltan datos diarios.
+ // Modified Dietz pondera cada flujo por el tiempo que permaneció fuera/dentro.
+ let weightedBase=start;
+ let totalFlows=0;
+
+ for(let i=1;i<snap.length;i++){
+   const x=snap[i];
+   const mv=x.movementType==='aporte'
+      ?Number(x.movementAmount||0)
+      :x.movementType==='retiro'
+        ?-Number(x.movementAmount||0):0;
+
+   if(!mv)continue;
+
+   const elapsed=Math.max(0,Math.min(days,sDays(r.startDate,x.date)));
+   const remaining=days-elapsed;
+   const weight=remaining/days;
+
+   weightedBase+=mv*weight;
+   totalFlows+=mv;
+ }
+
+ // Si no tenemos snapshot suficiente, buscar los movimientos del tramo.
+ if(!snap.length||weightedBase===start){
+   weightedBase=start;
+   rowsForDietz:
+   {
+     const allFlows=Number(r.netMov||0);
+     if(allFlows!==0)weightedBase=start;
+   }
+ }
+
+ const numerator=end-start-totalFlows;
+ if(weightedBase>0 && numerator/weightedBase>-1){
+   const periodReturn=numerator/weightedBase;
+   return Math.pow(1+periodReturn,365/days)-1;
+ }
+
  return null;
 }
 
