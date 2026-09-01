@@ -86,8 +86,14 @@ th{font-size:11px;color:#66717d}
   #sumar .sumar-period-tools .period-field{min-width:0}
 }
 
-#sumar .sumar-yield-chart-wrap{position:relative;width:100%;height:280px;border:1px solid #e1e6ea;border-radius:14px;background:#fff;overflow:hidden}
-#sumar #sumarYieldChart{display:block;width:100%;height:100%}
+#sumar .sumar-yield-chart-wrap{position:relative;width:100%;height:320px;border:1px solid #e1e6ea;border-radius:14px;background:#fff;overflow:hidden;touch-action:pan-y}
+#sumar #sumarYieldChart{display:block;width:100%;height:100%;touch-action:none}
+#sumar .sumar-yield-tooltip{position:absolute;z-index:5;display:none;min-width:170px;max-width:220px;padding:10px 12px;border-radius:11px;background:#18212b;color:#fff;box-shadow:0 5px 18px rgba(0,0,0,.18);font-size:13px;line-height:1.35;pointer-events:none}
+#sumar .sumar-yield-tooltip strong{font-size:15px}
+#sumar .sumar-yield-tooltip .muted{opacity:.78;font-size:11px;margin-top:2px}
+@media(max-width:700px){
+  #sumar .sumar-yield-chart-wrap{height:340px}
+}
 #sumar .sumar-chart-toolbar{display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px}
 #sumar .sumar-chart-toolbar select{height:38px;border:1px solid #c8d0d8;border-radius:9px;background:#fff;padding:0 10px;font-weight:700;color:#18212b}
 </style>
@@ -282,7 +288,10 @@ th{font-size:11px;color:#66717d}
         <option value="ea">Rentabilidad E.A. (%)</option>
       </select>
     </div>
-    <div class="sumar-yield-chart-wrap"><canvas id="sumarYieldChart"></canvas></div>
+    <div class="sumar-yield-chart-wrap">
+      <canvas id="sumarYieldChart"></canvas>
+      <div id="sumarYieldTooltip" class="sumar-yield-tooltip"></div>
+    </div>
     <div class="small" id="sumarYieldChartNote" style="margin-top:8px">Registra rendimientos o saldos para ver la evolución.</div>
   </div>
 
@@ -1193,33 +1202,89 @@ function sClearAccount(){
 }
 
 function sYieldChart(){
- const c=$('sumarYieldChart'),note=$('sumarYieldChartNote'),a=sAcc(),modeEl=$('sumarYieldChartMode');
+ const c=$('sumarYieldChart'),note=$('sumarYieldChartNote'),a=sAcc(),modeEl=$('sumarYieldChartMode'),tip=$('sumarYieldTooltip');
  if(!c||!note)return;
  const mode=modeEl?modeEl.value:'pesos';
  const rows=(a&&a.rows?a.rows:[]).slice().sort((x,y)=>String(x.date).localeCompare(String(y.date)));
  const data=rows.filter(r=>mode==='ea'?r.ea!=null:(r.bankGain!=null||r.calcGain!=null));
  const ctx=c.getContext('2d'),dpr=window.devicePixelRatio||1,rect=c.getBoundingClientRect();
- const w=Math.max(320,rect.width),hh=Math.max(220,rect.height);
+ const w=Math.max(320,rect.width),hh=Math.max(240,rect.height);
  c.width=Math.round(w*dpr);c.height=Math.round(hh*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,hh);
+
+ c._yieldPoints=[]; c._yieldMode=mode; c._yieldData=data;
+ if(!c._yieldEvents){
+   const showPoint=(ev)=>{
+     const rr=c.getBoundingClientRect();
+     const px=ev.clientX-rr.left,py=ev.clientY-rr.top;
+     let best=null,bestDist=Infinity;
+     (c._yieldPoints||[]).forEach(p=>{
+       const dx=px-p.x,dy=py-p.y,d=Math.sqrt(dx*dx+dy*dy);
+       if(d<bestDist){bestDist=d;best=p;}
+     });
+     if(!best||bestDist>32){if(tip)tip.style.display='none';return;}
+     const r=best.row,v=best.value;
+     const value=mode==='ea'
+       ?Number(v).toFixed(2).replace('.',',')+'% E.A.'
+       :money(v);
+     const origen=(r.bankGain!=null)?'Rendimiento reportado por el banco':'Rendimiento estimado';
+     if(tip){
+       tip.innerHTML='<strong>'+value+'</strong><div>'+sDF(r.date)+'</div><div class="muted">'+origen+'</div>';
+       tip.style.display='block';
+       const tw=tip.offsetWidth||180,th=tip.offsetHeight||65;
+       let left=best.x+12,top=best.y-th-12;
+       if(left+tw>w-6)left=best.x-tw-12;
+       if(left<6)left=6;
+       if(top<6)top=best.y+14;
+       if(top+th>hh-6)top=hh-th-6;
+       tip.style.left=left+'px';tip.style.top=top+'px';
+     }
+   };
+   c.addEventListener('pointerdown',showPoint,{passive:true});
+   c.addEventListener('pointermove',showPoint,{passive:true});
+   c.addEventListener('pointerleave',()=>{if(tip)tip.style.display='none'});
+   c._yieldEvents=true;
+ }
+
  if(!data.length){
    note.textContent=mode==='ea'?'Aún no hay E.A. calculada para graficar.':'Aún no hay rendimientos para graficar.';
    ctx.font='14px Arial';ctx.fillStyle='#697586';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('Sin datos todavía',w/2,hh/2);return;
  }
+
  const vals=data.map(r=>mode==='ea'?Number(r.ea)*100:Number(r.bankGain!=null?r.bankGain:r.calcGain));
  const minVal=Math.min(0,...vals),maxVal=Math.max(0,...vals),range=Math.max(1e-9,maxVal-minVal);
- const pad={l:82,r:18,t:22,b:48},pw=w-pad.l-pad.r,ph=hh-pad.t-pad.b,y0=minVal-range*.12,y1=maxVal+range*.12;
+ const pad={l:92,r:20,t:28,b:58},pw=w-pad.l-pad.r,ph=hh-pad.t-pad.b,y0=minVal-range*.12,y1=maxVal+range*.12;
  const X=i=>data.length===1?pad.l+pw/2:pad.l+i/(data.length-1)*pw,Y=v=>pad.t+(1-(v-y0)/(y1-y0))*ph;
- ctx.font='11px Arial';ctx.textBaseline='middle';ctx.textAlign='right';
- for(let i=0;i<=4;i++){const v=y0+(y1-y0)*i/4,yy=Y(v);ctx.strokeStyle='#e8edf2';ctx.beginPath();ctx.moveTo(pad.l,yy);ctx.lineTo(w-pad.r,yy);ctx.stroke();ctx.fillStyle='#697586';ctx.fillText(mode==='ea'?v.toFixed(2).replace('.',',')+'%':money(v),pad.l-8,yy)}
- if(minVal<=0&&maxVal>=0){const yy=Y(0);ctx.strokeStyle='#b9c1c9';ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(pad.l,yy);ctx.lineTo(w-pad.r,yy);ctx.stroke()}
+
+ ctx.font='12px Arial';ctx.textBaseline='middle';ctx.textAlign='right';
+ for(let i=0;i<=4;i++){
+   const v=y0+(y1-y0)*i/4,yy=Y(v);
+   ctx.strokeStyle='#e8edf2';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pad.l,yy);ctx.lineTo(w-pad.r,yy);ctx.stroke();
+   ctx.fillStyle='#697586';
+   ctx.fillText(mode==='ea'?v.toFixed(2).replace('.',',')+'%':money(v),pad.l-10,yy);
+ }
+ if(minVal<=0&&maxVal>=0){
+   const yy=Y(0);ctx.strokeStyle='#aeb8c2';ctx.lineWidth=1.4;ctx.beginPath();ctx.moveTo(pad.l,yy);ctx.lineTo(w-pad.r,yy);ctx.stroke();
+ }
  ctx.strokeStyle='#d8dee5';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pad.l,pad.t);ctx.lineTo(pad.l,hh-pad.b);ctx.lineTo(w-pad.r,hh-pad.b);ctx.stroke();
- ctx.strokeStyle='#0b4fb3';ctx.lineWidth=2.5;ctx.beginPath();data.forEach((r,i)=>{const xx=X(i),yy=Y(vals[i]);i?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy)});ctx.stroke();
- data.forEach((r,i)=>{const xx=X(i),yy=Y(vals[i]);ctx.fillStyle='#fff';ctx.strokeStyle='#0b4fb3';ctx.lineWidth=2;ctx.beginPath();ctx.arc(xx,yy,4,0,Math.PI*2);ctx.fill();ctx.stroke()});
- ctx.font='11px Arial';ctx.fillStyle='#697586';ctx.textAlign='center';ctx.textBaseline='top';
- const step=data.length<=8?1:Math.ceil(data.length/8);
- data.forEach((r,i)=>{if(i===0||i===data.length-1||i%step===0)ctx.fillText(sDF(r.date),X(i),hh-pad.b+12)});
- note.textContent=data.length+' dato'+(data.length===1?'':'s')+' · '+(mode==='ea'?'E.A. equivalente':'rendimiento diario')+' · '+(a?a.name:'');
+
+ ctx.strokeStyle='#0b4fb3';ctx.lineWidth=3;ctx.lineJoin='round';ctx.lineCap='round';ctx.beginPath();
+ data.forEach((r,i)=>{const xx=X(i),yy=Y(vals[i]);i?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy)});
+ ctx.stroke();
+
+ data.forEach((r,i)=>{
+   const xx=X(i),yy=Y(vals[i]);
+   c._yieldPoints.push({x:xx,y:yy,value:vals[i],row:r});
+   ctx.fillStyle='#fff';ctx.strokeStyle='#0b4fb3';ctx.lineWidth=2.5;
+   ctx.beginPath();ctx.arc(xx,yy,5,0,Math.PI*2);ctx.fill();ctx.stroke();
+ });
+
+ ctx.font='12px Arial';ctx.fillStyle='#697586';ctx.textAlign='center';ctx.textBaseline='top';
+ const step=data.length<=7?1:Math.ceil(data.length/7);
+ data.forEach((r,i)=>{if(i===0||i===data.length-1||i%step===0)ctx.fillText(sDF(r.date),X(i),hh-pad.b+14)});
+
+ note.textContent=data.length+' dato'+(data.length===1?'':'s')+' · '+(mode==='ea'?'E.A. equivalente':'rendimiento diario')+' · Toca un punto para ver el valor · '+(a?a.name:'');
 }
+
 
 function sChart(){const c=$('sumarChart'),note=$('sumarChartNote'),a=sAcc();if(!c||!note)return;const rows=(a&&a.rows?a.rows:[]).slice().sort((x,y)=>String(x.date).localeCompare(String(y.date))),plotted=rows.filter(r=>r.balance!=null),ctx=c.getContext('2d'),dpr=window.devicePixelRatio||1,rect=c.getBoundingClientRect(),w=Math.max(320,rect.width),h=Math.max(220,rect.height);c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);if(!plotted.length){note.textContent='Aún no hay saldos para graficar.';ctx.font='14px Arial';ctx.fillStyle='#697586';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('Sin datos todavía',w/2,h/2);return}note.textContent=plotted.length+' saldo'+(plotted.length===1?'':'s')+' disponible'+(plotted.length===1?'':'s')+' · '+a.name;const vals=plotted.map(r=>Number(r.balance)||0),mn=Math.min(...vals),mx=Math.max(...vals),rg=Math.max(1,mx-mn),pad={l:78,r:18,t:22,b:48},pw=w-pad.l-pad.r,ph=h-pad.t-pad.b,y0=mn-rg*.12,y1=mx+rg*.12,X=i=>plotted.length===1?pad.l+pw/2:pad.l+i/(plotted.length-1)*pw,Y=v=>pad.t+(1-(v-y0)/(y1-y0))*ph;ctx.font='11px Arial';ctx.textBaseline='middle';ctx.textAlign='right';for(let i=0;i<=4;i++){const v=y0+(y1-y0)*i/4,yy=Y(v);ctx.strokeStyle='#e8edf2';ctx.beginPath();ctx.moveTo(pad.l,yy);ctx.lineTo(w-pad.r,yy);ctx.stroke();ctx.fillStyle='#697586';ctx.fillText(money(v),pad.l-8,yy)}ctx.strokeStyle='#d8dee5';ctx.beginPath();ctx.moveTo(pad.l,pad.t);ctx.lineTo(pad.l,h-pad.b);ctx.lineTo(w-pad.r,h-pad.b);ctx.stroke();ctx.strokeStyle='#0b4fb3';ctx.lineWidth=2.5;ctx.beginPath();plotted.forEach((r,i)=>{const xx=X(i),yy=Y(r.balance);i?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy)});ctx.stroke();plotted.forEach((r,i)=>{const xx=X(i),yy=Y(r.balance);ctx.fillStyle='#fff';ctx.strokeStyle='#0b4fb3';ctx.lineWidth=2;ctx.beginPath();ctx.arc(xx,yy,4,0,Math.PI*2);ctx.fill();ctx.stroke()});ctx.font='11px Arial';ctx.fillStyle='#697586';ctx.textAlign='center';ctx.textBaseline='top';const step=plotted.length<=8?1:Math.ceil(plotted.length/8);plotted.forEach((r,i)=>{if(i===0||i===plotted.length-1||i%step===0)ctx.fillText(sDF(r.date),X(i),h-pad.b+12)})}
 sLoad();sumarAccounts.forEach(a=>{try{sCalc(a)}catch(e){}});sRenderAccounts();$('sumarCurrentDate').value=sDate(new Date());$('sumarAccountSelect').addEventListener('change',()=>{sumarSelectedId=$('sumarAccountSelect').value;sRender();sSummary();sChart();sYieldChart();sTramoRender()});$('sumarPeriodSelect')?.addEventListener('change',()=>{sSummary()});$('sumarAddAccount').addEventListener('click',sAdd);$('sumarRenameAccount').addEventListener('click',sRename);$('sumarDeleteAccount').addEventListener('click',sDelete);$('sumarCurrentBalance').addEventListener('input',()=>sFmt('sumarCurrentBalance'));$('sumarMovementAmount').addEventListener('input',()=>sFmt('sumarMovementAmount'));$('sumarMovementType').addEventListener('change',()=>{$('sumarMovementWrap').style.display=$('sumarMovementType').value==='none'?'none':'block';if($('sumarMovementType').value==='none')$('sumarMovementAmount').value=''});$('saveSumarDaily').addEventListener('click',sSaveDaily);$('saveSumarTramo').addEventListener('click',sTramoSave);$('sumarExportData')?.addEventListener('click',sExportData);$('sumarImportData')?.addEventListener('click',()=>$('sumarImportFile').click());$('sumarImportFile')?.addEventListener('change',e=>{if(e.target.files[0])sImportData(e.target.files[0]);e.target.value=''});$('clearSumarAccount').addEventListener('click',sClearAccount);$('sumarYieldChartMode')?.addEventListener('change',sYieldChart);sRender();sSummary();sChart();sYieldChart();sTramoRender();window.addEventListener('resize',()=>{sChart();sYieldChart()});
