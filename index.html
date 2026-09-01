@@ -447,77 +447,90 @@ function sBase(prev,r){const m=Number(r.movementAmount)||0;return Number(prev.ba
 function sNormalize(a){a.rows.forEach(r=>{r.movementType=r.movementType||'none';r.movementAmount=Number(r.movementAmount)||0;r.bankGain=(r.bankGain==null||r.bankGain==='')?null:Number(r.bankGain);r.balance=(r.balance==null||r.balance==='')?null:Number(r.balance);r.reconstructed=false})}
 function sCalc(a){
  if(!a||!Array.isArray(a.rows))return;
+
  sNormalize(a);
  a.rows.sort((x,y)=>String(x.date).localeCompare(String(y.date)));
 
  /*
-  RECONSTRUCCIÓN HACIA ATRÁS — lógica de Sumar:
-  Si conocemos el saldo final de una fecha y conocemos el rendimiento
-  reportado para el DÍA ANTERIOR, ese rendimiento es el que debemos
-  restar para obtener el saldo de ese día anterior.
+  MOTOR DE RECONSTRUCCIÓN DE SUMAR
 
-  Ejemplo:
-    31/07 saldo conocido = 30.365.492
-    30/07 rendimiento banco = 8.000
-    => saldo 30/07 = 30.365.492 - 8.000
+  Cada fila representa el cierre de un día.
 
-  Luego:
-    29/07 rendimiento banco = 7.900
-    => saldo 29/07 = saldo 30/07 - 7.900
+  HACIA ATRÁS:
+    Si conocemos el saldo de HOY y el rendimiento de AYER:
+      saldo_ayer = saldo_hoy - rendimiento_ayer
+    Si hubo un aporte ayer:
+      saldo_ayer = saldo_hoy - aporte_ayer - rendimiento_ayer
+    Si hubo un retiro ayer:
+      saldo_ayer = saldo_hoy + retiro_ayer - rendimiento_ayer
 
-  Se repite hacia atrás hasta donde existan rendimientos.
-  Los saldos introducidos manualmente nunca se reemplazan.
-  Aportes/retiros se consideran en la fecha en que fueron registrados.
+  HACIA ADELANTE:
+    Si conocemos el saldo de AYER y el rendimiento de HOY:
+      saldo_hoy = saldo_ayer + rendimiento_hoy
+    ajustando aportes/retiros.
+
+  IMPORTANTE:
+  - Los saldos que el usuario escribe nunca se reemplazan.
+  - Un rendimiento bancario siempre pertenece a la fecha de su propia fila.
+  - Se reconstruyen cadenas completas, no solo una fila.
+  - Solo se reconstruye entre fechas consecutivas (1 día), porque no se
+    puede inventar qué pasó en días intermedios que no tienen registro.
  */
 
- for(let pass=0;pass<30;pass++){
+ for(let pass=0;pass<50;pass++){
    let changed=false;
 
-   // PRIMERO: reconstrucción hacia atrás.
-   // El rendimiento que pertenece al día anterior está en prev.bankGain,
-   // no en cur.bankGain.
+   // 1) HACIA ATRÁS.
+   // El rendimiento de la fila PREV es el que se resta al saldo de CUR.
    for(let i=a.rows.length-1;i>0;i--){
-     const prev=a.rows[i-1],cur=a.rows[i];
+     const prev=a.rows[i-1];
+     const cur=a.rows[i];
 
-     if(cur.balance==null || prev.balance!=null || prev.bankGain==null)continue;
+     if(cur.balance==null)continue;
+     if(prev.balance!=null)continue;
+     if(prev.bankGain==null)continue;
      if(sDays(prev.date,cur.date)!==1)continue;
 
-     let b=Number(cur.balance);
+     let previousBalance=Number(cur.balance);
 
-     // Si hubo un aporte/retiro en el día anterior, separamos ese flujo
-     // del rendimiento para no convertirlo en rentabilidad.
-     const mov=Number(prev.movementAmount||0);
-     if(prev.movementType==='aporte') b-=mov;
-     if(prev.movementType==='retiro') b+=mov;
+     if(prev.movementType==='aporte'){
+       previousBalance-=Number(prev.movementAmount||0);
+     }else if(prev.movementType==='retiro'){
+       previousBalance+=Number(prev.movementAmount||0);
+     }
 
-     // El saldo final del día anterior = saldo final del día actual
-     // menos el rendimiento generado en el día anterior.
-     b-=Number(prev.bankGain||0);
+     previousBalance-=Number(prev.bankGain||0);
 
-     if(Number.isFinite(b)){
-       prev.balance=b;
+     if(Number.isFinite(previousBalance)){
+       prev.balance=previousBalance;
        prev.reconstructed=true;
        changed=true;
      }
    }
 
-   // SEGUNDO: reconstrucción hacia adelante, útil cuando se conoce
-   // el saldo inicial y se introducen rendimientos posteriores.
+   // 2) HACIA ADELANTE.
+   // El rendimiento de la fila CUR se suma al saldo de PREV.
    for(let i=1;i<a.rows.length;i++){
-     const prev=a.rows[i-1],cur=a.rows[i];
+     const prev=a.rows[i-1];
+     const cur=a.rows[i];
 
-     if(prev.balance==null || cur.balance!=null || cur.bankGain==null)continue;
+     if(prev.balance==null)continue;
+     if(cur.balance!=null)continue;
+     if(cur.bankGain==null)continue;
      if(sDays(prev.date,cur.date)!==1)continue;
 
-     let b=Number(prev.balance);
+     let currentBalance=Number(prev.balance);
 
-     if(cur.movementType==='aporte') b+=Number(cur.movementAmount||0);
-     if(cur.movementType==='retiro') b-=Number(cur.movementAmount||0);
+     if(cur.movementType==='aporte'){
+       currentBalance+=Number(cur.movementAmount||0);
+     }else if(cur.movementType==='retiro'){
+       currentBalance-=Number(cur.movementAmount||0);
+     }
 
-     b+=Number(cur.bankGain||0);
+     currentBalance+=Number(cur.bankGain||0);
 
-     if(Number.isFinite(b)){
-       cur.balance=b;
+     if(Number.isFinite(currentBalance)){
+       cur.balance=currentBalance;
        cur.reconstructed=true;
        changed=true;
      }
@@ -526,64 +539,43 @@ function sCalc(a){
    if(!changed)break;
  }
 
- // Cálculo diario.
- // Cada rendimiento bancario pertenece al día de su propia fila.
- // Para ese día necesitamos el capital ANTES de sumar el rendimiento.
+ // 3) Cálculos diarios.
  a.rows.forEach((r,i)=>{
    r.days=null;
    r.calcGain=null;
    r.ea=null;
 
-   if(r.bankGain==null)return;
+   if(i===0)return;
 
-   const gain=Number(r.bankGain);
-   let base=null;
+   const prev=a.rows[i-1];
+   const days=sDays(prev.date,r.date);
+   r.days=days;
 
-   /*
-    Si tenemos el saldo del día, el capital sobre el cual se produjo
-    el rendimiento es:
-      saldo final - aporte + retiro - rendimiento
-   */
-   if(r.balance!=null){
-     base=Number(r.balance);
-
-     if(r.movementType==='aporte')
-       base-=Number(r.movementAmount||0);
-
-     if(r.movementType==='retiro')
-       base+=Number(r.movementAmount||0);
-
-     base-=gain;
+   // Diferencia de saldo: útil para comprobar el rendimiento implícito.
+   if(prev.balance!=null&&r.balance!=null){
+     r.calcGain=Number(r.balance)-Number(prev.balance)
+       -(r.movementType==='aporte'?Number(r.movementAmount||0):0)
+       +(r.movementType==='retiro'?Number(r.movementAmount||0):0);
    }
 
-   /*
-    Si no tenemos el saldo del mismo día pero tenemos el saldo del día
-    siguiente, la reconstrucción anterior ya debió crear r.balance.
-   */
-   if(base!=null && base>0 && 1+gain/base>0){
-     r.ea=sEA(Math.pow(1+gain/base,1)-1);
-     r.days=1;
-   }
+   // E.A. usando el rendimiento REAL que reportó el banco.
+   if(r.bankGain!=null&&r.balance!=null&&days>0){
+     let capital=Number(r.balance);
 
-   if(i>0){
-     const prev=a.rows[i-1];
-     r.days=sDays(prev.date,r.date);
-
-     // Si el saldo del día anterior y el actual existen, mostramos
-     // también el rendimiento calculado por diferencia.
-     if(prev.balance!=null&&r.balance!=null){
-       r.calcGain=Number(r.balance)-Number(prev.balance)
-         -(r.movementType==='aporte'?Number(r.movementAmount||0):0)
-         +(r.movementType==='retiro'?Number(r.movementAmount||0):0);
+     // Saldo final - movimiento + retiro - rendimiento = capital que estuvo
+     // trabajando durante ese día.
+     if(r.movementType==='aporte'){
+       capital-=Number(r.movementAmount||0);
+     }else if(r.movementType==='retiro'){
+       capital+=Number(r.movementAmount||0);
      }
 
-     /*
-      Para un tramo de varios días sin movimientos, el rendimiento
-      reportado de r corresponde a ese tramo si la fecha no es diaria.
-      En registros diarios normales d=1.
-     */
-     if(base!=null&&base>0&&1+gain/base>0){
-       r.ea=sEA(Math.pow(1+gain/base,1/r.days)-1);
+     capital-=Number(r.bankGain||0);
+
+     const gain=Number(r.bankGain);
+     if(capital>0&&1+gain/capital>0){
+       const dailyRate=Math.pow(1+gain/capital,1/days)-1;
+       r.ea=sEA(dailyRate);
      }
    }
  });
