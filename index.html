@@ -71,7 +71,21 @@ th{font-size:11px;color:#66717d}
 #sumar #sumarChart{display:block;width:100%;height:100%}
 #sumar .saved-sumar{border:1px solid #dfe4e8;border-radius:14px;padding:14px;margin-bottom:10px;background:#fff}
 @media(max-width:700px){#sumar .sumar-summary-grid{grid-template-columns:1fr 1fr}#sumar .sumar-account-actions{width:100%}#sumar .sumar-account-actions button{flex:1}}
-#sumar .table-scroll table{min-width:900px}#sumar .table-scroll th,#sumar .table-scroll td{white-space:nowrap}</style>
+#sumar .table-scroll table{min-width:900px}#sumar .table-scroll th,#sumar .table-scroll td{white-space:nowrap}
+#sumar .sumar-period-tools{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:12px}
+#sumar .sumar-period-tools .period-field{min-width:210px;flex:1}
+#sumar .sumar-period-tools select{height:46px;width:100%;border:1px solid #c8d0d8;border-radius:11px;background:#fff;color:#18212b;padding:0 12px;font-size:15px;font-weight:700}
+#sumar .sumar-quality{border:1px solid #dfe5ea;border-radius:12px;padding:11px 13px;background:#f8fafb;display:flex;align-items:center;gap:9px;min-height:46px}
+#sumar .sumar-quality .dot{width:10px;height:10px;border-radius:50%;background:#64748b;flex:0 0 auto}
+#sumar .sumar-quality.good .dot{background:#16803a}
+#sumar .sumar-quality.mid .dot{background:#b7791f}
+#sumar .sumar-quality.low .dot{background:#b54747}
+#sumar .sumar-last-update{margin-top:6px;font-size:12px;color:#66717d}
+@media(max-width:700px){
+  #sumar .sumar-period-tools{display:grid;grid-template-columns:1fr}
+  #sumar .sumar-period-tools .period-field{min-width:0}
+}
+</style>
 </head>
 <body>
 <div class="wrap">
@@ -253,13 +267,30 @@ th{font-size:11px;color:#66717d}
   </div>
 
   <div class="card">
-    <h3 style="margin-top:0">Resumen del período</h3>
+    <div class="section-head">
+      <div><h3 style="margin:0">Resumen del período</h3>
+      <div class="small">Selecciona cuántos días recientes quieres analizar.</div></div>
+    </div>
+    <div class="sumar-period-tools">
+      <div class="period-field">
+        <label for="sumarPeriodSelect">Período a analizar</label>
+        <select id="sumarPeriodSelect">
+          <option value="all">Todo el historial</option>
+          <option value="1">Último día</option>
+          <option value="7">Últimos 7 días</option>
+          <option value="15">Últimos 15 días</option>
+          <option value="30" selected>Últimos 30 días</option>
+        </select>
+      </div>
+      <div class="sumar-quality" id="sumarQuality"><span class="dot"></span><span>Calidad del cálculo: —</span></div>
+    </div>
     <div class="results" style="margin-top:0">
       <div class="result"><div class="k">Rendimiento del período</div><div class="v" id="sumarPeriodGain">—</div></div>
       <div class="result"><div class="k">Promedio diario del período</div><div class="v" id="sumarPeriodAvg">—</div></div>
       <div class="result"><div class="k">E.A. promedio diario</div><div class="v" id="sumarPeriodEA">—</div></div>
       <div class="result"><div class="k">Días</div><div class="v" id="sumarPeriodDays">—</div></div>
     </div>
+    <div class="sumar-last-update" id="sumarLastUpdate"></div>
   </div>
 
   <div class="card">
@@ -672,35 +703,33 @@ function sRender(){
 function sSummary(){
  const a=sAcc();
  const rows=(a&&a.rows?a.rows:[]).slice().sort((x,y)=>String(x.date).localeCompare(String(y.date)));
-
- // Account-level cards: always use the most recent registered/reconstructed row.
  const valid=rows.filter(r=>r.balance!=null);
  const latest=valid.length?valid[valid.length-1]:null;
 
+ // Estado actual de la cuenta.
  if(latest){
    $('sumarCurrent').textContent=money(latest.balance);
    $('sumarAccountBalance').textContent=money(latest.balance);
 
-   const latestGain=latest.bankGain!=null
-     ?Number(latest.bankGain)
-     :latest.calcGain!=null?Number(latest.calcGain):null;
+   let latestGain=latest.bankGain!=null?Number(latest.bankGain):null;
+   let latestEA=latest.ea!=null?Number(latest.ea):null;
+
+   if(latestGain==null&&valid.length>=2){
+     const prev=valid[valid.length-2],d=sDays(prev.date,latest.date);
+     let flow=0;
+     if(latest.movementType==='aporte')flow=Number(latest.movementAmount||0);
+     if(latest.movementType==='retiro')flow=-Number(latest.movementAmount||0);
+     latestGain=Number(latest.balance)-Number(prev.balance)-flow;
+     let cap=Number(prev.balance);
+     if(latest.movementType==='aporte')cap+=Number(latest.movementAmount||0);
+     if(cap>0&&1+latestGain/cap>0){
+       latestEA=sEA(Math.pow(1+latestGain/cap,1/d)-1);
+     }
+   }
 
    $('sumarAccountGain').textContent=latestGain==null?'—':sM2(latestGain);
-
-   if(latestGain!=null&&latest.days>0){
-     $('sumarAccountAvg').textContent=sM2(latestGain/Number(latest.days));
-   }else{
-     $('sumarAccountAvg').textContent='—';
-   }
-
-   let cardEA=latest.ea!=null?Number(latest.ea):null;
-   if(cardEA==null&&valid.length>=2){
-     const prev=valid[valid.length-2],d=sDays(prev.date,latest.date);
-     let g=latest.bankGain!=null?Number(latest.bankGain):Number(latest.balance)-Number(prev.balance)-(latest.movementType==='aporte'?Number(latest.movementAmount||0):latest.movementType==='retiro'?-Number(latest.movementAmount||0):0);
-     let cap=Number(prev.balance)+(latest.movementType==='aporte'?Number(latest.movementAmount||0):0);
-     if(cap>0&&1+g/cap>0)cardEA=sEA(Math.pow(1+g/cap,1/d)-1);
-   }
-   $('sumarAccountEA').textContent=cardEA==null?'—':sP(cardEA);
+   $('sumarAccountAvg').textContent=latestGain!=null&&latest.days>0?sM2(latestGain/Number(latest.days)):'—';
+   $('sumarAccountEA').textContent=latestEA==null?'—':sP(latestEA);
    $('sumarStatus').textContent=latest.reconstructed
      ?'Saldo actual reconstruido con los rendimientos reportados por el banco.'
      :'Último saldo registrado según el banco.';
@@ -713,87 +742,93 @@ function sSummary(){
    $('sumarStatus').textContent='Registra un saldo para comenzar.';
  }
 
- if(!rows.length||!valid.length){
+ const sel=$('sumarPeriodSelect');
+ const choice=sel?sel.value:'all';
+ let periodRows=valid;
+
+ if(valid.length && choice!=='all'){
+   const n=Number(choice);
+   const endDate=valid[valid.length-1].date;
+   const startLimit=sDate(new Date(new Date(endDate+'T12:00:00').getTime()-Math.max(0,n-1)*86400000));
+   periodRows=valid.filter(r=>r.date>=startLimit&&r.date<=endDate);
+   if(periodRows.length<2 && valid.length>=2)periodRows=valid.slice(-2);
+ }
+
+ if(!periodRows.length){
    $('sumarPeriodGain').textContent='—';
    $('sumarPeriodAvg').textContent='—';
    $('sumarPeriodEA').textContent='—';
    $('sumarPeriodDays').textContent='—';
+   const q=$('sumarQuality');
+   if(q){q.className='sumar-quality';q.innerHTML='<span class="dot"></span><span>Calidad del cálculo: sin datos</span>'}
+   $('sumarLastUpdate').textContent='';
    return;
  }
 
- const first=valid[0];
- const last=valid[valid.length-1];
+ const first=periodRows[0],last=periodRows[periodRows.length-1];
  const periodDays=Math.max(1,sDays(first.date,last.date));
 
- // Rendimiento total del período: saldos extremos separando aportes/retiros.
+ // Movimientos únicamente para ajustar el rendimiento, nunca como ganancia.
  let aportes=0,retiros=0;
  rows.forEach(r=>{
+   if(r.date<first.date||r.date>last.date)return;
    const m=Number(r.movementAmount||0);
    if(r.movementType==='aporte')aportes+=m;
    if(r.movementType==='retiro')retiros+=m;
  });
-
  const periodGain=Number(last.balance)-Number(first.balance)-aportes+retiros;
  const periodAvg=periodGain/periodDays;
 
- // E.A. promedio: promedio de las tasas diarias obtenidas de rendimientos
- // reales, sin contaminarla con aportes o retiros.
+ // E.A. promedio basada en las tasas diarias disponibles en el período.
  const dailyRates=[];
+ for(let i=1;i<periodRows.length;i++){
+   const prev=periodRows[i-1],r=periodRows[i];
+   const d=sDays(prev.date,r.date);
+   if(d<1)continue;
 
- rows.forEach(r=>{
-   if(r.bankGain==null||r.balance==null)return;
+   let flow=0;
+   if(r.movementType==='aporte')flow=Number(r.movementAmount||0);
+   if(r.movementType==='retiro')flow=-Number(r.movementAmount||0);
 
-   const gain=Number(r.bankGain);
-   let capital=Number(r.balance);
-
-   if(r.movementType==='aporte')
-     capital-=Number(r.movementAmount||0);
-   else if(r.movementType==='retiro')
-     capital+=Number(r.movementAmount||0);
-
-   capital-=gain;
+   let gain=r.bankGain!=null?Number(r.bankGain):Number(r.balance)-Number(prev.balance)-flow;
+   let capital=Number(prev.balance);
+   if(r.movementType==='aporte')capital+=Number(r.movementAmount||0);
 
    if(capital>0&&1+gain/capital>0){
-     const d=r.days&&r.days>0?r.days:1;
      const dailyRate=Math.pow(1+gain/capital,1/d)-1;
-     if(Number.isFinite(dailyRate))dailyRates.push(dailyRate);
-   }
- });
-
- // Si no hay rendimiento bancario reportado, usar los saldos consecutivos
- // disponibles para obtener tasas implícitas, separando movimientos.
- if(!dailyRates.length){
-   for(let i=1;i<valid.length;i++){
-     const prev=valid[i-1],r=valid[i];
-     const d=sDays(prev.date,r.date);
-     if(d<1)continue;
-
-     let movement=0;
-     if(r.movementType==='aporte')movement=Number(r.movementAmount||0);
-     if(r.movementType==='retiro')movement=-Number(r.movementAmount||0);
-
-     const gain=Number(r.balance)-Number(prev.balance)-movement;
-     const capital=Number(prev.balance)+(movement>0?movement:0);
-
-     if(capital>0&&1+gain/capital>0){
-       const dailyRate=Math.pow(1+gain/capital,1/d)-1;
-       if(Number.isFinite(dailyRate))dailyRates.push(dailyRate);
-     }
+     if(Number.isFinite(dailyRate))dailyRates.push({dailyRate,d});
    }
  }
 
- const avgDailyRate=dailyRates.length
-   ?dailyRates.reduce((s,x)=>s+x,0)/dailyRates.length
-   :null;
-
- const periodEA=avgDailyRate!=null
-   ?Math.pow(1+avgDailyRate,365)-1
-   :null;
+ let periodEA=null;
+ if(dailyRates.length){
+   const totalDays=dailyRates.reduce((s,x)=>s+x.d,0);
+   const avgDailyRate=dailyRates.reduce((s,x)=>s+x.dailyRate*x.d,0)/totalDays;
+   periodEA=sEA(avgDailyRate);
+ }
 
  $('sumarPeriodGain').textContent=sM2(periodGain);
  $('sumarPeriodAvg').textContent=sM2(periodAvg);
  $('sumarPeriodEA').textContent=periodEA==null?'—':sP(periodEA);
  $('sumarPeriodDays').textContent=periodDays;
+
+ // Indicador de calidad: refleja cuánto del período está respaldado por
+ // rendimientos bancarios reales frente a estimaciones.
+ const bankCount=periodRows.filter(r=>r.bankGain!=null).length;
+ const balanceCount=periodRows.filter(r=>r.balance!=null).length;
+ const coverage=balanceCount?bankCount/balanceCount:0;
+ const q=$('sumarQuality');
+ if(q){
+   let cls='low',label='Parcial';
+   if(coverage>=0.70&&balanceCount>=2){cls='good';label='Alta'}
+   else if(coverage>=0.30&&balanceCount>=2){cls='mid';label='Media'}
+   q.className='sumar-quality '+cls;
+   q.innerHTML='<span class="dot"></span><span>Calidad del cálculo: <strong>'+label+'</strong> · '+bankCount+' de '+balanceCount+' registros con rendimiento banco</span>';
+ }
+
+ $('sumarLastUpdate').textContent=latest
+   ?'Último dato registrado: '+sDF(latest.date)+(latest.reconstructed?' · saldo reconstruido':'')
+   :'';
 }
 
 function sSaveDaily(){const a=sAcc(),date=$('sumarCurrentDate').value,balance=$('sumarCurrentBalance').value.trim()?sMoney('sumarCurrentBalance'):null,type=$('sumarMovementType').value,amount=type==='none'?0:sMoney('sumarMovementAmount'),bank=$('sumarBankYield').value.trim()?sYield('sumarBankYield'):null;if(!a||!date){$('sumarError').textContent='Ingresa la fecha.';return}if(balance==null&&bank==null&&type==='none'){$('sumarError').textContent='Ingresa al menos el saldo o el rendimiento del banco.';return}if(type!=='none'&&!amount){$('sumarError').textContent='Ingresa el valor del aporte o retiro.';return}const old=a.rows.find(r=>r.date===date);if(old){if(!confirm('Ya existe un registro para '+sDF(date)+'. ¿Reemplazarlo?'))return;old.balance=balance;old.movementType=type;old.movementAmount=amount;old.bankGain=bank}else a.rows.push({id:Date.now(),date,balance,movementType:type,movementAmount:amount,bankGain:bank});sCalc(a);sSave();sRender();sSummary();sChart();sTramoRender();$('sumarCurrentBalance').value='';$('sumarMovementAmount').value='';$('sumarBankYield').value='';$('sumarMovementType').value='none';$('sumarMovementWrap').style.display='none';$('sumarError').textContent=''}
@@ -1138,7 +1173,7 @@ function sClearAccount(){
 }
 
 function sChart(){const c=$('sumarChart'),note=$('sumarChartNote'),a=sAcc();if(!c||!note)return;const rows=(a&&a.rows?a.rows:[]).slice().sort((x,y)=>String(x.date).localeCompare(String(y.date))),plotted=rows.filter(r=>r.balance!=null),ctx=c.getContext('2d'),dpr=window.devicePixelRatio||1,rect=c.getBoundingClientRect(),w=Math.max(320,rect.width),h=Math.max(220,rect.height);c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,w,h);if(!plotted.length){note.textContent='Aún no hay saldos para graficar.';ctx.font='14px Arial';ctx.fillStyle='#697586';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('Sin datos todavía',w/2,h/2);return}note.textContent=plotted.length+' saldo'+(plotted.length===1?'':'s')+' disponible'+(plotted.length===1?'':'s')+' · '+a.name;const vals=plotted.map(r=>Number(r.balance)||0),mn=Math.min(...vals),mx=Math.max(...vals),rg=Math.max(1,mx-mn),pad={l:78,r:18,t:22,b:48},pw=w-pad.l-pad.r,ph=h-pad.t-pad.b,y0=mn-rg*.12,y1=mx+rg*.12,X=i=>plotted.length===1?pad.l+pw/2:pad.l+i/(plotted.length-1)*pw,Y=v=>pad.t+(1-(v-y0)/(y1-y0))*ph;ctx.font='11px Arial';ctx.textBaseline='middle';ctx.textAlign='right';for(let i=0;i<=4;i++){const v=y0+(y1-y0)*i/4,yy=Y(v);ctx.strokeStyle='#e8edf2';ctx.beginPath();ctx.moveTo(pad.l,yy);ctx.lineTo(w-pad.r,yy);ctx.stroke();ctx.fillStyle='#697586';ctx.fillText(money(v),pad.l-8,yy)}ctx.strokeStyle='#d8dee5';ctx.beginPath();ctx.moveTo(pad.l,pad.t);ctx.lineTo(pad.l,h-pad.b);ctx.lineTo(w-pad.r,h-pad.b);ctx.stroke();ctx.strokeStyle='#0b4fb3';ctx.lineWidth=2.5;ctx.beginPath();plotted.forEach((r,i)=>{const xx=X(i),yy=Y(r.balance);i?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy)});ctx.stroke();plotted.forEach((r,i)=>{const xx=X(i),yy=Y(r.balance);ctx.fillStyle='#fff';ctx.strokeStyle='#0b4fb3';ctx.lineWidth=2;ctx.beginPath();ctx.arc(xx,yy,4,0,Math.PI*2);ctx.fill();ctx.stroke()});ctx.font='11px Arial';ctx.fillStyle='#697586';ctx.textAlign='center';ctx.textBaseline='top';const step=plotted.length<=8?1:Math.ceil(plotted.length/8);plotted.forEach((r,i)=>{if(i===0||i===plotted.length-1||i%step===0)ctx.fillText(sDF(r.date),X(i),h-pad.b+12)})}
-sLoad();sumarAccounts.forEach(a=>{try{sCalc(a)}catch(e){}});sRenderAccounts();$('sumarCurrentDate').value=sDate(new Date());$('sumarAccountSelect').addEventListener('change',()=>{sumarSelectedId=$('sumarAccountSelect').value;sRender();sSummary();sChart();sTramoRender()});$('sumarAddAccount').addEventListener('click',sAdd);$('sumarRenameAccount').addEventListener('click',sRename);$('sumarDeleteAccount').addEventListener('click',sDelete);$('sumarCurrentBalance').addEventListener('input',()=>sFmt('sumarCurrentBalance'));$('sumarMovementAmount').addEventListener('input',()=>sFmt('sumarMovementAmount'));$('sumarMovementType').addEventListener('change',()=>{$('sumarMovementWrap').style.display=$('sumarMovementType').value==='none'?'none':'block';if($('sumarMovementType').value==='none')$('sumarMovementAmount').value=''});$('saveSumarDaily').addEventListener('click',sSaveDaily);$('saveSumarTramo').addEventListener('click',sTramoSave);$('sumarExportData')?.addEventListener('click',sExportData);$('sumarImportData')?.addEventListener('click',()=>$('sumarImportFile').click());$('sumarImportFile')?.addEventListener('change',e=>{if(e.target.files[0])sImportData(e.target.files[0]);e.target.value=''});$('clearSumarAccount').addEventListener('click',sClearAccount);sRender();sSummary();sChart();sTramoRender();window.addEventListener('resize',sChart);
+sLoad();sumarAccounts.forEach(a=>{try{sCalc(a)}catch(e){}});sRenderAccounts();$('sumarCurrentDate').value=sDate(new Date());$('sumarAccountSelect').addEventListener('change',()=>{sumarSelectedId=$('sumarAccountSelect').value;sRender();sSummary();sChart();sTramoRender()});$('sumarPeriodSelect')?.addEventListener('change',()=>{sSummary()});$('sumarAddAccount').addEventListener('click',sAdd);$('sumarRenameAccount').addEventListener('click',sRename);$('sumarDeleteAccount').addEventListener('click',sDelete);$('sumarCurrentBalance').addEventListener('input',()=>sFmt('sumarCurrentBalance'));$('sumarMovementAmount').addEventListener('input',()=>sFmt('sumarMovementAmount'));$('sumarMovementType').addEventListener('change',()=>{$('sumarMovementWrap').style.display=$('sumarMovementType').value==='none'?'none':'block';if($('sumarMovementType').value==='none')$('sumarMovementAmount').value=''});$('saveSumarDaily').addEventListener('click',sSaveDaily);$('saveSumarTramo').addEventListener('click',sTramoSave);$('sumarExportData')?.addEventListener('click',sExportData);$('sumarImportData')?.addEventListener('click',()=>$('sumarImportFile').click());$('sumarImportFile')?.addEventListener('change',e=>{if(e.target.files[0])sImportData(e.target.files[0]);e.target.value=''});$('clearSumarAccount').addEventListener('click',sClearAccount);sRender();sSummary();sChart();sTramoRender();window.addEventListener('resize',sChart);
 /* ================= FIN SUMAR V12 ================= */
 const HISTORY_KEY='simulador_fic_cdt_historial_v1';
  function getHistory(){try{return JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]')}catch(e){return[]}}
