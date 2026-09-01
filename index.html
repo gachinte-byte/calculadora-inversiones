@@ -61,8 +61,8 @@ th{font-size:11px;color:#66717d}
 .edit-history{width:36px;height:36px;flex:0 0 36px;border:1px solid #d7dce0;border-radius:9px;background:#fff;color:#18212b;font-size:18px;line-height:1;cursor:pointer}.edit-history:hover{background:#f1f3f5}
 
 #sumar .sumar-account-bar{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
-#sumar .sumar-account-select{flex:1;min-width:220px}
-#sumar .sumar-account-actions{display:flex;gap:8px;flex-wrap:wrap}
+#sumar .sumar-account-select{flex:1;min-width:260px}#sumar .sumar-account-select select{height:52px;font-size:17px;font-weight:700;border:1px solid #bfc7cf;border-radius:12px;background:#fff;color:#18212b;padding:0 13px;width:100%}
+#sumar .sumar-account-actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center}#sumar .sumar-account-actions .secondary{width:auto;height:40px;padding:0 11px;font-size:12px;border-radius:10px}
 #sumar .sumar-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:12px}
 #sumar .sumar-mini{border:1px solid #e1e6ea;border-radius:12px;padding:12px;background:#fff}
 #sumar .sumar-mini .k{font-size:12px;color:#66717d;margin-bottom:5px}
@@ -189,18 +189,18 @@ th{font-size:11px;color:#66717d}
       <input id="sumarImportFile" type="file" accept="application/json" style="display:none"><button class="secondary" id="sumarDeleteAccount" type="button">ELIMINAR</button>
       </div>
     </div>
+  <div class="hero-result">
+    <div class="hero-label">SALDO DE LA CUENTA SELECCIONADA</div>
+    <div class="hero-value" id="sumarCurrent">$—</div>
+    <div class="hero-gain" id="sumarStatus">Registra un saldo para comenzar.</div>
+  </div>
+
     <div class="sumar-summary-grid">
       <div class="sumar-mini"><div class="k">Saldo actual</div><div class="v" id="sumarAccountBalance">—</div></div>
       <div class="sumar-mini"><div class="k">Rendimiento último</div><div class="v" id="sumarAccountGain">—</div></div>
       <div class="sumar-mini"><div class="k">Promedio diario</div><div class="v" id="sumarAccountAvg">—</div></div>
       <div class="sumar-mini"><div class="k">E.A. del último día</div><div class="v" id="sumarAccountEA">—</div></div>
     </div>
-  </div>
-
-  <div class="hero-result">
-    <div class="hero-label">SALDO DE LA CUENTA SELECCIONADA</div>
-    <div class="hero-value" id="sumarCurrent">$—</div>
-    <div class="hero-gain" id="sumarStatus">Registra un saldo para comenzar.</div>
   </div>
 
   <div class="card">
@@ -224,7 +224,7 @@ th{font-size:11px;color:#66717d}
     </div>
 
     <label for="sumarBankYield">Rendimiento reportado por el banco <span class="small">(opcional)</span></label>
-    <div class="input-wrap"><span class="prefix">$</span><input id="sumarBankYield" type="text" inputmode="decimal" autocomplete="off" placeholder="11.823,36"></div>
+    <div class="input-wrap"><span class="prefix">$</span><input id="sumarBankYield" type="text" inputmode="text" autocomplete="off" placeholder="11.823,36 o -800"></div>
     <div class="small">Puedes introducir este dato aunque no tengas el saldo de ese día. La app calcula el promedio diario y la Rentabilidad E.A. equivalente.</div>
 
     <button class="primary" id="saveSumarDaily" type="button">GUARDAR SALDO</button>
@@ -693,7 +693,14 @@ function sSummary(){
      $('sumarAccountAvg').textContent='—';
    }
 
-   $('sumarAccountEA').textContent=latest.ea==null?'—':sP(latest.ea);
+   let cardEA=latest.ea!=null?Number(latest.ea):null;
+   if(cardEA==null&&valid.length>=2){
+     const prev=valid[valid.length-2],d=sDays(prev.date,latest.date);
+     let g=latest.bankGain!=null?Number(latest.bankGain):Number(latest.balance)-Number(prev.balance)-(latest.movementType==='aporte'?Number(latest.movementAmount||0):latest.movementType==='retiro'?-Number(latest.movementAmount||0):0);
+     let cap=Number(prev.balance)+(latest.movementType==='aporte'?Number(latest.movementAmount||0):0);
+     if(cap>0&&1+g/cap>0)cardEA=sEA(Math.pow(1+g/cap,1/d)-1);
+   }
+   $('sumarAccountEA').textContent=cardEA==null?'—':sP(cardEA);
    $('sumarStatus').textContent=latest.reconstructed
      ?'Saldo actual reconstruido con los rendimientos reportados por el banco.'
      :'Último saldo registrado según el banco.';
@@ -832,72 +839,40 @@ function sAdd(){const name=prompt('Nombre de la nueva cuenta o inversión:','Ban
 function sRename(){const a=sAcc();if(!a)return;const name=prompt('Nuevo nombre:',a.name);if(!name||!name.trim())return;a.name=name.trim();sSave();sRenderAccounts();sTramoRender()}
 function sDelete(){if(sumarAccounts.length===1){alert('Debes conservar al menos una cuenta.');return}const a=sAcc();if(a&&confirm('¿Eliminar "'+a.name+'" y todos sus registros?')){sumarAccounts=sumarAccounts.filter(x=>x.id!==a.id);sumarSelectedId=sumarAccounts[0].id;sSave();sRenderAccounts();sRender();sSummary();sChart();sTramoRender()}}
 function sTramoSave(){
- const a=sAcc();
- const rows=(a&&a.rows?a.rows:[]).slice().sort((x,y)=>String(x.date).localeCompare(String(y.date)));
+ const a=sAcc(),rows=(a&&a.rows?a.rows:[]).slice().sort((x,y)=>String(x.date).localeCompare(String(y.date)));
  const valid=rows.filter(r=>r.balance!=null);
- if(!a||valid.length<2){
-   $('sumarError').textContent='Necesitas al menos dos saldos conocidos para guardar un tramo.';
-   return;
- }
-
+ if(!a||valid.length<2){$('sumarError').textContent='Necesitas al menos dos saldos conocidos para guardar un tramo.';return}
  const first=valid[0],last=valid[valid.length-1],days=sDays(first.date,last.date);
+ let aportes=0,retiros=0;
+ rows.forEach((r,i)=>{if(i===0)return;const m=Number(r.movementAmount||0);if(r.movementType==='aporte')aportes+=m;if(r.movementType==='retiro')retiros+=m});
+ const netMov=aportes-retiros,gain=Number(last.balance)-Number(first.balance)-netMov,avg=gain/days;
 
- // El resumen del tramo usa SIEMPRE los saldos extremos y los movimientos.
- // Los rendimientos bancarios diarios quedan guardados como detalle real.
- let netMov=0;
- rows.forEach((r,i)=>{
-   if(i===0)return;
-   if(r.movementType==='aporte')netMov+=Number(r.movementAmount||0);
-   if(r.movementType==='retiro')netMov-=Number(r.movementAmount||0);
- });
- const gain=Number(last.balance)-Number(first.balance)-netMov;
- const avg=days>0?gain/days:null;
-
- // E.A. del tramo. Si hubo movimientos, es una aproximación ajustada al
- // movimiento neto; la etiqueta lo deja claro en el historial guardado.
- let ea=null;
- const base=Number(first.balance)+Math.max(0,netMov);
- const ending=Number(last.balance);
- if(base>0&&ending>0){
-   const ratio=ending/base;
-   if(ratio>0)ea=Math.pow(ratio,365/days)-1;
+ const rates=[];
+ for(let i=1;i<rows.length;i++){
+   const prev=rows[i-1],r=rows[i]; if(prev.balance==null||r.balance==null)continue;
+   const d=sDays(prev.date,r.date);
+   let g=r.bankGain!=null?Number(r.bankGain):null;
+   if(g==null){
+     const m=r.movementType==='aporte'?Number(r.movementAmount||0):r.movementType==='retiro'?-Number(r.movementAmount||0):0;
+     g=Number(r.balance)-Number(prev.balance)-m;
+   }
+   let capital=Number(prev.balance);
+   if(r.movementType==='aporte')capital+=Number(r.movementAmount||0);
+   if(capital>0&&1+g/capital>0){
+     const dr=Math.pow(1+g/capital,1/d)-1;
+     if(Number.isFinite(dr))rates.push({dr,d});
+   }
  }
-
- // Guardamos una copia completa del tramo para poder consultarlo después
- // aunque el usuario limpie la tabla actual de la cuenta.
- const snapshot=rows.map(r=>({
-   date:r.date,
-   days:r.days||null,
-   balance:r.balance==null?null:Number(r.balance),
-   reconstructed:!!r.reconstructed,
-   movementType:r.movementType||'none',
-   movementAmount:Number(r.movementAmount||0),
-   bankGain:r.bankGain==null?null:Number(r.bankGain),
-   ea:r.ea==null?null:Number(r.ea)
- }));
-
- const h=sTramos();
- h.push({
-   id:Date.now(),
-   accountId:a.id,
-   accountName:a.name,
-   startDate:first.date,
-   endDate:last.date,
-   startBalance:Number(first.balance),
-   endBalance:Number(last.balance),
-   days,
-   gain,
-   avg,
-   ea,
-   netMov,
-   snapshot,
-   savedAt:new Date().toISOString()
- });
- sTramosSave(h);
- sTramoRender();
- $('sumarError').textContent='Tramo guardado correctamente. Puedes limpiarlo de la cuenta para comenzar un nuevo período.';
+ let ea=null;
+ if(rates.length){
+   const td=rates.reduce((s,x)=>s+x.d,0);
+   const dr=rates.reduce((s,x)=>s+x.dr*x.d,0)/td;
+   ea=sEA(dr);
+ }
+ const snapshot=rows.map(r=>({date:r.date,days:r.days||null,balance:r.balance==null?null:Number(r.balance),reconstructed:!!r.reconstructed,movementType:r.movementType||'none',movementAmount:Number(r.movementAmount||0),bankGain:r.bankGain==null?null:Number(r.bankGain),ea:r.ea==null?null:Number(r.ea)}));
+ const h=sTramos();h.push({id:Date.now(),accountId:a.id,accountName:a.name,startDate:first.date,endDate:last.date,startBalance:Number(first.balance),endBalance:Number(last.balance),days,gain,avg,ea,netMov,snapshot,savedAt:new Date().toISOString()});
+ sTramosSave(h);sTramoRender();$('sumarError').textContent='Tramo guardado correctamente. Puedes limpiarlo de la cuenta para comenzar un nuevo período.';
 }
-
 function sTramoRender(){
  const box=$('sumarSavedHistory'),a=sAcc();
  const h=sTramos().filter(x=>a&&x.accountId===a.id).reverse();
