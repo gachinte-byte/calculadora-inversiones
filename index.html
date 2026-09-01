@@ -842,37 +842,115 @@ function sTramoSave(){
  const a=sAcc(),rows=(a&&a.rows?a.rows:[]).slice().sort((x,y)=>String(x.date).localeCompare(String(y.date)));
  const valid=rows.filter(r=>r.balance!=null);
  if(!a||valid.length<2){$('sumarError').textContent='Necesitas al menos dos saldos conocidos para guardar un tramo.';return}
- const first=valid[0],last=valid[valid.length-1],days=sDays(first.date,last.date);
- let aportes=0,retiros=0;
- rows.forEach((r,i)=>{if(i===0)return;const m=Number(r.movementAmount||0);if(r.movementType==='aporte')aportes+=m;if(r.movementType==='retiro')retiros+=m});
- const netMov=aportes-retiros,gain=Number(last.balance)-Number(first.balance)-netMov,avg=gain/days;
 
- const rates=[];
- for(let i=1;i<rows.length;i++){
-   const prev=rows[i-1],r=rows[i]; if(prev.balance==null||r.balance==null)continue;
-   const d=sDays(prev.date,r.date);
-   let g=r.bankGain!=null?Number(r.bankGain):null;
-   if(g==null){
-     const m=r.movementType==='aporte'?Number(r.movementAmount||0):r.movementType==='retiro'?-Number(r.movementAmount||0):0;
-     g=Number(r.balance)-Number(prev.balance)-m;
-   }
-   let capital=Number(prev.balance);
-   if(r.movementType==='aporte')capital+=Number(r.movementAmount||0);
-   if(capital>0&&1+g/capital>0){
-     const dr=Math.pow(1+g/capital,1/d)-1;
-     if(Number.isFinite(dr))rates.push({dr,d});
-   }
- }
+ const first=valid[0],last=valid[valid.length-1],days=sDays(first.date,last.date);
+
+ let aportes=0,retiros=0;
+ rows.forEach((r,i)=>{
+   if(i===0)return;
+   const m=Number(r.movementAmount||0);
+   if(r.movementType==='aporte')aportes+=m;
+   if(r.movementType==='retiro')retiros+=m;
+ });
+ const netMov=aportes-retiros;
+
+ // Rendimiento real del período: saldo final - saldo inicial - movimientos.
+ const gain=Number(last.balance)-Number(first.balance)-netMov;
+ const avg=days>0?gain/days:null;
+
+ /*
+  E.A. DEL TRAMO
+  ----------------
+  Cuando NO hubo aportes ni retiros, la E.A. correcta se obtiene directamente
+  de los dos saldos extremos. Esto evita que pequeñas diferencias entre los
+  rendimientos diarios reportados por el banco produzcan una E.A. artificial.
+
+      E.A. = (saldo final / saldo inicial)^(365/días) - 1
+
+  Ejemplo:
+      41.988.911 -> 42.225.000 en 30 días
+      rendimiento = 236.089
+      E.A. ≈ 7,06%
+
+  Si hubo movimientos, hacemos un cálculo encadenado por subperíodos, separando
+  cada aporte/retiro del rendimiento.
+ */
  let ea=null;
- if(rates.length){
-   const td=rates.reduce((s,x)=>s+x.d,0);
-   const dr=rates.reduce((s,x)=>s+x.dr*x.d,0)/td;
-   ea=sEA(dr);
+
+ if(netMov===0 && Number(first.balance)>0 && Number(last.balance)>0){
+   const ratio=Number(last.balance)/Number(first.balance);
+   if(ratio>0) ea=Math.pow(ratio,365/days)-1;
+ }else{
+   const subperiodReturns=[];
+   for(let i=1;i<rows.length;i++){
+     const prev=rows[i-1],r=rows[i];
+     if(prev.balance==null||r.balance==null)continue;
+     const d=sDays(prev.date,r.date);
+     if(d<1)continue;
+
+     let g=r.bankGain!=null?Number(r.bankGain):null;
+     const movement=r.movementType==='aporte'
+       ?Number(r.movementAmount||0)
+       :r.movementType==='retiro'
+         ?-Number(r.movementAmount||0)
+         :0;
+
+     if(g==null) g=Number(r.balance)-Number(prev.balance)-movement;
+
+     // Capital efectivamente invertido durante ese subperíodo.
+     let capital=Number(prev.balance);
+     if(r.movementType==='aporte') capital+=Number(r.movementAmount||0);
+
+     if(capital>0 && 1+g/capital>0){
+       const subReturn=Math.pow(1+g/capital,365/d)-1;
+       if(Number.isFinite(subReturn)) subperiodReturns.push({subReturn,d});
+     }
+   }
+
+   // Encadenar los factores de los subperíodos y llevarlos al período anual.
+   if(subperiodReturns.length){
+     let factor=1,totalDays=0;
+     subperiodReturns.forEach(x=>{
+       factor*=Math.pow(1+x.subReturn,x.d/365);
+       totalDays+=x.d;
+     });
+     if(totalDays>0 && factor>0) ea=Math.pow(factor,365/totalDays)-1;
+   }
  }
- const snapshot=rows.map(r=>({date:r.date,days:r.days||null,balance:r.balance==null?null:Number(r.balance),reconstructed:!!r.reconstructed,movementType:r.movementType||'none',movementAmount:Number(r.movementAmount||0),bankGain:r.bankGain==null?null:Number(r.bankGain),ea:r.ea==null?null:Number(r.ea)}));
- const h=sTramos();h.push({id:Date.now(),accountId:a.id,accountName:a.name,startDate:first.date,endDate:last.date,startBalance:Number(first.balance),endBalance:Number(last.balance),days,gain,avg,ea,netMov,snapshot,savedAt:new Date().toISOString()});
- sTramosSave(h);sTramoRender();$('sumarError').textContent='Tramo guardado correctamente. Puedes limpiarlo de la cuenta para comenzar un nuevo período.';
+
+ const snapshot=rows.map(r=>({
+   date:r.date,
+   days:r.days||null,
+   balance:r.balance==null?null:Number(r.balance),
+   reconstructed:!!r.reconstructed,
+   movementType:r.movementType||'none',
+   movementAmount:Number(r.movementAmount||0),
+   bankGain:r.bankGain==null?null:Number(r.bankGain),
+   ea:r.ea==null?null:Number(r.ea)
+ }));
+
+ const h=sTramos();
+ h.push({
+   id:Date.now(),
+   accountId:a.id,
+   accountName:a.name,
+   startDate:first.date,
+   endDate:last.date,
+   startBalance:Number(first.balance),
+   endBalance:Number(last.balance),
+   days,
+   gain,
+   avg,
+   ea,
+   netMov,
+   snapshot,
+   savedAt:new Date().toISOString()
+ });
+ sTramosSave(h);
+ sTramoRender();
+ $('sumarError').textContent='Tramo guardado correctamente. Puedes limpiarlo de la cuenta para comenzar un nuevo período.';
 }
+
 function sTramoRender(){
  const box=$('sumarSavedHistory'),a=sAcc();
  const h=sTramos().filter(x=>a&&x.accountId===a.id).reverse();
