@@ -1195,26 +1195,26 @@ function sTramoRender(){
 
 function sNewPeriod(){
  const a=sAcc();
- const rows=(a&&a.rows?a.rows:[]).slice().sort((x,y)=>String(x.date).localeCompare(String(y.date)));
- const valid=rows.filter(r=>r.balance!=null);
+ const rows=(a&&Array.isArray(a.rows)?a.rows:[]).slice().sort((x,y)=>String(x.date).localeCompare(String(y.date)));
+ const valid=rows.filter(r=>r&&r.balance!=null&&isFinite(Number(r.balance)));
 
  if(!a||valid.length<2){
-   $('sumarError').textContent='Necesitas al menos dos saldos conocidos para guardar el período.';
+   $('sumarError').textContent='Necesitas al menos dos saldos conocidos para guardar y comenzar un nuevo período.';
    return;
  }
 
- if(!confirm('Se guardará el tramo actual y se limpiará el historial diario. El último saldo quedará como inicio del nuevo período. ¿Continuar?'))return;
+ const first=valid[0],last=valid[valid.length-1];
+ const days=sDays(first.date,last.date);
 
- // Guarda el tramo usando exactamente el cálculo vigente.
+ if(!confirm('Se guardará el período actual y se limpiará el historial diario de esta cuenta. El saldo final de '+money(Number(last.balance))+' quedará como saldo inicial del nuevo período. ¿Continuar?')) return;
+
+ // Guardar el tramo actual antes de limpiar.
  sTramoSave();
 
- // Conserva la cuenta y su último saldo como punto de partida del nuevo período.
- const accounts=sAccounts();
- const idx=accounts.findIndex(x=>x.id===a.id);
- if(idx<0)return;
-
- const last=valid[valid.length-1];
- accounts[idx].rows=[{
+ // IMPORTANTE: sTramoSave() puede dejar un mensaje de validación.
+ // Aquí se crea explícitamente el nuevo período con el último saldo como ancla.
+ const newAnchor={
+   id:Date.now(),
    date:last.date,
    days:null,
    balance:Number(last.balance),
@@ -1224,14 +1224,33 @@ function sNewPeriod(){
    calcGain:null,
    ea:null,
    reconstructed:false,
-   note:'Inicio del nuevo período — saldo tomado del período anterior.'
- }];
- sAccountsSave(accounts);
- sumarSelectedId=a.id;
+   note:'Saldo inicial heredado del período anterior'
+ };
 
- sRender();sSummary();sChart();sYieldChart();sTramoRender();
- $('sumarError').textContent='Nuevo período iniciado. El tramo anterior quedó guardado en Tramos guardados.';
- window.scrollTo({top:0,behavior:'smooth'});
+ // Limpiar SOLO el historial diario de la cuenta seleccionada.
+ // Se conserva el tramo recién guardado en el historial de tramos.
+ a.rows=[newAnchor];
+
+ // Persistir inmediatamente para que el cambio no se pierda al cambiar de cuenta o recargar.
+ sSave();
+
+ // Refrescar absolutamente todos los elementos dependientes de la cuenta.
+ try{sCalc(a)}catch(e){}
+ sRenderAccounts();
+ sRender();
+ sSummary();
+ sChart();
+ sYieldChart();
+ sTramoRender();
+
+ $('sumarCurrentDate').value=last.date;
+ $('sumarCurrentBalance').value='';
+ $('sumarMovementAmount').value='';
+ $('sumarBankYield').value='';
+ $('sumarMovementType').value='none';
+ if($('sumarMovementWrap'))$('sumarMovementWrap').style.display='none';
+
+ $('sumarError').textContent='Período guardado. Nuevo período iniciado con saldo inicial de '+money(Number(last.balance))+'.';
 }
 
 function sClearAccount(){
