@@ -672,72 +672,127 @@ function sRender(){
 function sSummary(){
  const a=sAcc();
  const rows=(a&&a.rows?a.rows:[]).slice().sort((x,y)=>String(x.date).localeCompare(String(y.date)));
- const valid=rows.filter(r=>r.balance!=null);
- const reported=rows.filter(r=>r.bankGain!=null);
 
+ if(!rows.length){
+   $('sumarPeriodGain').textContent='—';
+   $('sumarPeriodAvg').textContent='—';
+   $('sumarPeriodEA').textContent='—';
+   $('sumarPeriodDays').textContent='—';
+   return;
+ }
+
+ const valid=rows.filter(r=>r.balance!=null);
  if(!valid.length){
-   ['sumarCurrent','sumarAccountBalance','sumarAccountGain','sumarAccountAvg','sumarAccountEA','sumarPeriodGain','sumarPeriodAvg','sumarPeriodEA','sumarPeriodDays'].forEach(id=>$(id).textContent='—');
-   $('sumarStatus').textContent='Registra un saldo o un rendimiento del banco.';
+   $('sumarPeriodGain').textContent='—';
+   $('sumarPeriodAvg').textContent='—';
+   $('sumarPeriodEA').textContent='—';
+   $('sumarPeriodDays').textContent='—';
    return;
  }
 
  const first=valid[0];
  const last=valid[valid.length-1];
- const periodDays=sDays(first.date,last.date);
+ const periodDays=Math.max(1,sDays(first.date,last.date));
 
  /*
-  PERÍODO:
-  Si conocemos saldo inicial y saldo final, el rendimiento total del período
-  debe salir de esos dos saldos, ajustado por aportes/retiros.
-  Los rendimientos diarios reportados sirven para el detalle diario, pero NO
-  se suman para construir el rendimiento total cuando hay dos saldos extremos.
+  RENDIMIENTO DEL PERÍODO
+
+  Se calcula con los saldos extremos y los movimientos:
+    rendimiento = saldo final - saldo inicial - aportes + retiros
+
+  Esto evita que un retiro de $3.200.000 aparezca como rentabilidad.
  */
- let totalMov=0;
+ let aportes=0,retiros=0;
  rows.forEach(r=>{
-   if(r.date===first.date) return;
-   if(r.movementType==='aporte') totalMov+=Number(r.movementAmount||0);
-   if(r.movementType==='retiro') totalMov-=Number(r.movementAmount||0);
+   const m=Number(r.movementAmount||0);
+   if(r.movementType==='aporte')aportes+=m;
+   if(r.movementType==='retiro')retiros+=m;
  });
 
- const periodGain=Number(last.balance)-Number(first.balance)-totalMov;
- const avgPeriod=periodDays>0?periodGain/periodDays:null;
+ const periodGain=Number(last.balance)-Number(first.balance)-aportes+retiros;
+ const periodAvg=periodGain/periodDays;
 
- // E.A. del período:
- // - sin movimientos: anualización directa entre saldo inicial y final.
- // - con movimientos: aproximación ajustada usando capital inicial + movimientos
- //   netos; se muestra como estimada porque los flujos pueden ocurrir en fechas distintas.
- let eaPeriod=null;
- const baseForEA=Number(first.balance)+Math.max(0,totalMov);
- const endingForEA=Number(last.balance);
- if(baseForEA>0 && endingForEA>0){
-   const ratio=endingForEA/baseForEA;
-   if(ratio>0) eaPeriod=Math.pow(ratio,365/periodDays)-1;
+ /*
+  E.A. PROMEDIO DIARIO
+
+  NO usamos:
+      (saldo final / saldo inicial)^(365/días)-1
+
+  porque esa fórmula queda distorsionada cuando existen aportes/retiros.
+
+  En su lugar usamos los días en los que conocemos un rendimiento y un
+  capital de trabajo. Para cada día:
+      tasa diaria = rendimiento / capital del día
+      E.A. diaria = (1 + tasa diaria)^365 - 1
+
+  El indicador del período es el promedio de esas tasas diarias.
+ */
+ const dailyRates=[];
+
+ rows.forEach((r,i)=>{
+   if(r.bankGain==null||r.balance==null)return;
+
+   const gain=Number(r.bankGain);
+   let capital=Number(r.balance);
+
+   // Saldo final antes de sumar el rendimiento de ese día.
+   if(r.movementType==='aporte'){
+     capital-=Number(r.movementAmount||0);
+   }else if(r.movementType==='retiro'){
+     capital+=Number(r.movementAmount||0);
+   }
+
+   capital-=gain;
+
+   if(capital>0 && 1+gain/capital>0){
+     const d=r.days&&r.days>0?r.days:1;
+     const dailyRate=Math.pow(1+gain/capital,1/d)-1;
+     if(Number.isFinite(dailyRate)){
+       dailyRates.push(dailyRate);
+     }
+   }
+ });
+
+ /*
+  Si no hay rendimientos reportados pero sí existen saldos consecutivos,
+  calculamos la tasa diaria implícita después de separar los movimientos.
+ */
+ if(!dailyRates.length){
+   for(let i=1;i<rows.length;i++){
+     const prev=rows[i-1],r=rows[i];
+     if(prev.balance==null||r.balance==null)continue;
+
+     const d=sDays(prev.date,r.date);
+     if(d<1)continue;
+
+     let movement=0;
+     if(r.movementType==='aporte')movement=Number(r.movementAmount||0);
+     if(r.movementType==='retiro')movement=-Number(r.movementAmount||0);
+
+     const gain=Number(r.balance)-Number(prev.balance)-movement;
+     const capital=Number(prev.balance)+(movement>0?movement:0);
+
+     if(capital>0&&1+gain/capital>0){
+       const dailyRate=Math.pow(1+gain/capital,1/d)-1;
+       if(Number.isFinite(dailyRate))dailyRates.push(dailyRate);
+     }
+   }
  }
 
- // Último día: sigue usando exclusivamente el rendimiento reportado por el banco.
- const lastReported=last.bankGain!=null?last:null;
- $('sumarCurrent').textContent=money(last.balance);
- $('sumarAccountBalance').textContent=money(last.balance);
- $('sumarAccountGain').textContent=lastReported?sM2(lastReported.bankGain):'—';
- $('sumarAccountAvg').textContent=reported.length
-   ? sM2(reported.reduce((t,r)=>t+Number(r.bankGain),0)/reported.length)
-   : '—';
- $('sumarAccountEA').textContent=last.ea==null?'—':sP(last.ea);
+ const avgDailyRate=dailyRates.length
+   ?dailyRates.reduce((sum,x)=>sum+x,0)/dailyRates.length
+   :null;
+
+ const periodEA=avgDailyRate!=null
+   ?Math.pow(1+avgDailyRate,365)-1
+   :null;
 
  $('sumarPeriodGain').textContent=sM2(periodGain);
- $('sumarPeriodAvg').textContent=avgPeriod==null?'—':sM2(avgPeriod);
- $('sumarPeriodEA').textContent=eaPeriod==null?'—':sP(eaPeriod);
+ $('sumarPeriodAvg').textContent=sM2(periodAvg);
+ $('sumarPeriodEA').textContent=periodEA==null?'—':sP(periodEA);
  $('sumarPeriodDays').textContent=periodDays;
-
- const estimatedDays=Math.max(0,periodDays-reported.length);
- $('sumarStatus').textContent=
-   'Del '+sDF(first.date)+' al '+sDF(last.date)+
-   ': saldo inicial '+money(first.balance)+
-   ' → saldo final '+money(last.balance)+
-   '. Rendimiento del período = saldo final − saldo inicial − movimientos.'+
-   (totalMov!==0?' Movimientos netos: '+money(totalMov)+'.':'')+
-   ' Los días sin rendimiento bancario se estiman por tramo y no sustituyen los datos del banco.';
 }
+
 function sSaveDaily(){const a=sAcc(),date=$('sumarCurrentDate').value,balance=$('sumarCurrentBalance').value.trim()?sMoney('sumarCurrentBalance'):null,type=$('sumarMovementType').value,amount=type==='none'?0:sMoney('sumarMovementAmount'),bank=$('sumarBankYield').value.trim()?sYield('sumarBankYield'):null;if(!a||!date){$('sumarError').textContent='Ingresa la fecha.';return}if(balance==null&&bank==null&&type==='none'){$('sumarError').textContent='Ingresa al menos el saldo o el rendimiento del banco.';return}if(type!=='none'&&!amount){$('sumarError').textContent='Ingresa el valor del aporte o retiro.';return}const old=a.rows.find(r=>r.date===date);if(old){if(!confirm('Ya existe un registro para '+sDF(date)+'. ¿Reemplazarlo?'))return;old.balance=balance;old.movementType=type;old.movementAmount=amount;old.bankGain=bank}else a.rows.push({id:Date.now(),date,balance,movementType:type,movementAmount:amount,bankGain:bank});sCalc(a);sSave();sRender();sSummary();sChart();sTramoRender();$('sumarCurrentBalance').value='';$('sumarMovementAmount').value='';$('sumarBankYield').value='';$('sumarMovementType').value='none';$('sumarMovementWrap').style.display='none';$('sumarError').textContent=''}
 function sExportData(){
  const payload={
