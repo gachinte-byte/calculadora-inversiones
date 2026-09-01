@@ -951,18 +951,71 @@ function sTramoSave(){
  $('sumarError').textContent='Tramo guardado correctamente. Puedes limpiarlo de la cuenta para comenzar un nuevo período.';
 }
 
+function sTramoEA(r){
+ const days=Math.max(1,Number(r.days)||sDays(r.startDate,r.endDate));
+ const start=Number(r.startBalance),end=Number(r.endBalance);
+ const net=Number(r.netMov||0);
+
+ // Sin aportes/retiros: use ONLY the two reliable endpoint balances.
+ // This is the key correction for periods with sparse daily data.
+ if(net===0 && start>0 && end>0){
+   const ratio=end/start;
+   return ratio>0 ? Math.pow(ratio,365/days)-1 : null;
+ }
+
+ // With movements: calculate a time-weighted/linked return from the
+ // subperiod observations, keeping movements outside the return.
+ const snap=(r.snapshot||[]).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+ const rates=[];
+ for(let i=1;i<snap.length;i++){
+   const prev=snap[i-1],cur=snap[i];
+   if(prev.balance==null||cur.balance==null)continue;
+   const d=sDays(prev.date,cur.date);
+   let g=cur.bankGain!=null?Number(cur.bankGain):null;
+   const mv=cur.movementType==='aporte'
+      ?Number(cur.movementAmount||0)
+      :cur.movementType==='retiro'
+        ?-Number(cur.movementAmount||0):0;
+   if(g==null)g=Number(cur.balance)-Number(prev.balance)-mv;
+   let cap=Number(prev.balance);
+   if(cur.movementType==='aporte')cap+=Number(cur.movementAmount||0);
+   if(cap>0 && 1+g/cap>0){
+     const daily=Math.pow(1+g/cap,1/d)-1;
+     if(Number.isFinite(daily))rates.push({daily,d});
+   }
+ }
+ if(rates.length){
+   let factor=1,totalDays=0;
+   rates.forEach(x=>{factor*=Math.pow(1+x.daily,x.d/365);totalDays+=x.d});
+   if(totalDays>0&&factor>0)return Math.pow(factor,365/totalDays)-1;
+ }
+ return null;
+}
+
 function sTramoRender(){
  const box=$('sumarSavedHistory'),a=sAcc();
- const h=sTramos().filter(x=>a&&x.accountId===a.id).reverse();
+ const all=sTramos();
+ const h=all.filter(x=>a&&x.accountId===a.id).reverse();
  if(!h.length){
    box.innerHTML='<div class="history-empty">No hay tramos guardados para esta cuenta.</div>';
    return;
  }
 
+ let changed=false;
+ h.forEach(r=>{
+   const corrected=sTramoEA(r);
+   if(corrected!=null && (r.ea==null || Math.abs(Number(r.ea)-corrected)>1e-12)){
+     r.ea=corrected;
+     changed=true;
+   }
+ });
+ if(changed)sTramosSave(all);
+
  box.innerHTML=h.map(r=>{
    const movTxt=r.netMov>0
      ? 'Aportes netos: '+money(r.netMov)
      : r.netMov<0 ? 'Retiros netos: '+money(Math.abs(r.netMov)) : 'Sin movimientos';
+
    const detail=(r.snapshot||[]).map(x=>{
      let mv='—';
      if(x.movementType==='aporte')mv='Aporte '+money(x.movementAmount);
@@ -973,6 +1026,8 @@ function sTramoRender(){
      return '<tr><td>'+sDF(x.date)+'</td><td>'+((x.days||'—'))+'</td><td>'+bal+'</td><td>'+mv+'</td><td>'+bg+'</td><td>'+ea+'</td></tr>';
    }).join('');
 
+   const tramoEA=sTramoEA(r);
+
    return '<div class="saved-sumar" style="margin-bottom:10px">'+
      '<div class="section-head">'+
        '<div><strong>'+sDF(r.startDate)+' → '+sDF(r.endDate)+'</strong>'+
@@ -980,7 +1035,7 @@ function sTramoRender(){
        '<button class="delete-history" data-stramo="'+r.id+'">×</button>'+
      '</div>'+
      '<div class="small" style="margin-top:8px">'+movTxt+'</div>'+
-     '<div class="small" style="margin-top:6px">Rendimiento del período: <strong>'+money(r.gain)+'</strong> · Promedio diario: <strong>'+sM2(r.avg)+'</strong> · Rentabilidad E.A.: <strong>'+sP(r.ea)+'</strong></div>'+
+     '<div class="small" style="margin-top:6px">Rendimiento del período: <strong>'+money(r.gain)+'</strong> · Promedio diario: <strong>'+sM2(r.avg)+'</strong> · Rentabilidad E.A.: <strong>'+(tramoEA==null?'—':sP(tramoEA))+'</strong></div>'+
      '<button class="secondary" type="button" data-sdetail="'+r.id+'" style="margin-top:9px">VER DETALLE DEL TRAMO</button>'+
      '<div id="sdetail_'+r.id+'" style="display:none;margin-top:10px;overflow:auto">'+
        '<table style="min-width:700px;width:100%"><thead><tr><th>Fecha</th><th>Días</th><th>Saldo final</th><th>Movimiento</th><th>Rendimiento banco</th><th>E.A.</th></tr></thead><tbody>'+detail+'</tbody></table>'+
@@ -988,19 +1043,19 @@ function sTramoRender(){
    '</div>';
  }).join('');
 
- box.querySelectorAll('[data-stramo]').forEach(b=>b.addEventListener('click',()=>{
-   const id=Number(b.dataset.stramo),x=sTramos();
+ box.querySelectorAll('[data-stramo]').forEach(btn=>btn.addEventListener('click',()=>{
+   const id=Number(btn.dataset.stramo),x=sTramos();
    if(confirm('¿Eliminar este tramo guardado?')){
      sTramosSave(x.filter(r=>Number(r.id)!==id));
      sTramoRender();
    }
  }));
- box.querySelectorAll('[data-sdetail]').forEach(b=>b.addEventListener('click',()=>{
-   const id=b.dataset.sdetail,el=$('sdetail_'+id);
+ box.querySelectorAll('[data-sdetail]').forEach(btn=>btn.addEventListener('click',()=>{
+   const id=btn.dataset.sdetail,el=$('sdetail_'+id);
    if(!el)return;
    const show=el.style.display==='none';
    el.style.display=show?'block':'none';
-   b.textContent=show?'OCULTAR DETALLE DEL TRAMO':'VER DETALLE DEL TRAMO';
+   btn.textContent=show?'OCULTAR DETALLE DEL TRAMO':'VER DETALLE DEL TRAMO';
  }));
 }
 
