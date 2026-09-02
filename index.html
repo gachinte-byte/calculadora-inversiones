@@ -171,10 +171,40 @@ th{font-size:11px;color:#66717d}
   <section id="monthly" class="page">
     <div class="card">
       <h2 style="margin-top:0">Proyección mes a mes</h2>
-      <p class="small">Proyección con capitalización mensual equivalente a la E.A. ingresada. Se muestran hasta 12 meses.</p>
+      <p class="small">Proyección con la misma fórmula mensual del Simulador. Cada mes representa 30 días y la tasa se calcula como (1 + E.A.)^(30/365) − 1. Los valores de la tabla son <strong>brutos</strong>; la retención se muestra por separado en el resumen.</p>
+      <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin:16px 0">
+        <label style="min-width:180px;flex:0 1 240px">
+          <span class="small" style="display:block;margin-bottom:6px">Fecha de inicio</span>
+          <input id="monthlyStartDate" type="date">
+        </label>
+        <label style="min-width:180px;flex:0 1 240px">
+          <span class="small" style="display:block;margin-bottom:6px">Meses a proyectar</span>
+          <select id="monthlyMonths">
+            <option value="1">1 mes</option><option value="2">2 meses</option><option value="3">3 meses</option>
+            <option value="4">4 meses</option><option value="5">5 meses</option><option value="6">6 meses</option>
+            <option value="7">7 meses</option><option value="8">8 meses</option><option value="9">9 meses</option>
+            <option value="10">10 meses</option><option value="11">11 meses</option><option value="12" selected>12 meses</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="results" style="margin-top:10px;margin-bottom:18px">
+        <div class="result main"><div class="k">Fecha estimada de vencimiento</div><div class="v" id="monthlyEndDisplay">—</div></div>
+      </div>
+
+      <div class="results" style="margin-top:10px;margin-bottom:18px">
+        <div class="result"><div class="k">Capital inicial</div><div class="v" id="monthlyInitial">—</div></div>
+        <div class="result"><div class="k">Ganancia bruta acumulada</div><div class="v" id="monthlyGross">—</div></div>
+        <div class="result"><div class="k">Retefuente estimada</div><div class="v" id="monthlyTax">—</div></div>
+        <div class="result"><div class="k">Ganancia neta acumulada</div><div class="v" id="monthlyNet">—</div></div>
+        <div class="result main"><div class="k">CAPITAL FINAL NETO</div><div class="v" id="monthlyFinalNet">—</div></div>
+      </div>
+      <div class="note" id="monthlyNote" style="margin-bottom:14px"></div>
       <div class="table-scroll">
-        <table><thead><tr><th>Mes</th><th>Capital inicial</th><th>Ganancia</th><th>Capital final</th></tr></thead>
-        <tbody id="monthlyBody"></tbody></table>
+        <table>
+          <thead><tr><th>Mes</th><th>Capital inicial</th><th>Ganancia del mes</th><th>Ganancia acumulada</th><th>Capital final bruto</th></tr></thead>
+          <tbody id="monthlyBody"></tbody>
+        </table>
       </div>
     </div>
   </section>
@@ -418,15 +448,70 @@ th{font-size:11px;color:#66717d}
    return true;
  }
  function renderMonthly(x){
-   const body=$('monthlyBody');body.innerHTML='';
-   let cap=x.capital;
+   const body=$('monthlyBody');
+   if(!body)return;
+   body.innerHTML='';
+
+   const sel=$('monthlyMonths');
+   const months=Math.max(1,Math.min(12,Number(sel&&sel.value)||12));
+
+   // Fórmula establecida del Simulador: tasa equivalente a 30 días.
    const monthlyRate=Math.pow(1+x.ea,30/365)-1;
-   for(let m=1;m<=12;m++){
-     const gain=cap*monthlyRate,fin=cap+gain;
-     body.insertAdjacentHTML('beforeend',
-       `<tr><td>${m}</td><td>${money(cap)}</td><td>${money(gain)}</td><td>${money(fin)}</td></tr>`);
-     cap=fin;
+
+   // Fecha: solo visualización de inicio/vencimiento. No altera la fórmula financiera.
+   const dateInput=$('monthlyStartDate');
+   let startStr=dateInput&&dateInput.value ? dateInput.value : '';
+   if(!startStr){
+     const now=new Date();
+     const local=new Date(now.getTime()-now.getTimezoneOffset()*60000);
+     startStr=local.toISOString().slice(0,10);
+     if(dateInput)dateInput.value=startStr;
    }
+
+   const start=new Date(startStr+'T00:00:00');
+   const end=new Date(start);
+   end.setMonth(end.getMonth()+months);
+
+   const dateFmt=new Intl.DateTimeFormat('es-CO',{day:'2-digit',month:'2-digit',year:'numeric'});
+   $('monthlyEndDisplay').textContent=dateFmt.format(end);
+
+   let cap=x.capital;
+   let lastGross=x.capital;
+
+   for(let month=1;month<=months;month++){
+     const gain=cap*monthlyRate;
+     const finalGross=cap+gain;
+     const gainAccum=finalGross-x.capital;
+
+     body.insertAdjacentHTML('beforeend',
+       `<tr>
+          <td>${month}</td>
+          <td>${money(cap)}</td>
+          <td>${money(gain)}</td>
+          <td>${money(gainAccum)}</td>
+          <td>${money(finalGross)}</td>
+        </tr>`);
+
+     cap=finalGross;
+     lastGross=finalGross;
+   }
+
+   const grossGain=lastGross-x.capital;
+   const tax=grossGain*x.ret;
+   const netGain=grossGain-tax;
+   const finalNet=x.capital+netGain;
+
+   $('monthlyInitial').textContent=money(x.capital);
+   $('monthlyGross').textContent=money(grossGain);
+   $('monthlyTax').textContent=money(tax);
+   $('monthlyNet').textContent=money(netGain);
+   $('monthlyFinalNet').textContent=money(finalNet);
+
+   const equivalentDays=months*30;
+   $('monthlyNote').innerHTML=
+     '<strong>'+months+' '+(months===1?'mes':'meses')+':</strong> la tabla muestra la ganancia <strong>bruta</strong> antes de impuestos. '+
+     'La fecha de vencimiento es únicamente una visualización basada en la fecha de inicio y el número de meses seleccionado. '+
+     'La rentabilidad utiliza '+equivalentDays+' días y la fórmula <strong>(1 + E.A.)^(30/365) − 1</strong>, igual a la del Simulador.';
  }
  function renderRates(x){
    const body=$('ratesBody'),cards=$('scenarioCards');
@@ -1531,7 +1616,9 @@ const HISTORY_KEY='simulador_fic_cdt_historial_v1';
  loadValues();
  formatCapital();
  calculate();
-})();
+if($('monthlyMonths'))$('monthlyMonths').addEventListener('change',()=>{const x=nums();if(valid(x))renderMonthly(x)});
+ if($('monthlyStartDate'))$('monthlyStartDate').addEventListener('change',()=>{const x=nums();if(valid(x))renderMonthly(x)});
+ })();
 </script>
 </body>
 </html>
