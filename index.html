@@ -116,6 +116,14 @@ th{font-size:11px;color:#66717d}
   #monthly .small { font-size:.78rem !important; }
   #monthlyEndDisplay { font-size:.82rem !important; }
 </style>
+
+<style id="monthly-v32">
+  #monthly .results { gap:8px; }
+  #monthly .result { padding:9px 10px !important; min-height:0 !important; }
+  #monthly .result .k { font-size:.70rem !important; line-height:1.2; }
+  #monthly .result .v { font-size:1.02rem !important; line-height:1.25; }
+  #monthly .result.main .v { font-size:1.08rem !important; }
+</style>
 </head>
 <body>
 <div class="wrap">
@@ -205,8 +213,11 @@ th{font-size:11px;color:#66717d}
         </label>
       </div>
 
-      <div class="small" style="margin:2px 0 16px">
-        <strong>Vencimiento estimado:</strong> <span id="monthlyEndDisplay">—</span>
+      <div class="results" style="margin-top:8px;margin-bottom:10px">
+        <div class="result">
+          <div class="k">Vencimiento estimado</div>
+          <div class="v" id="monthlyEndDisplay">—</div>
+        </div>
       </div>
 
       <div class="results" style="margin-top:10px;margin-bottom:18px">
@@ -214,7 +225,7 @@ th{font-size:11px;color:#66717d}
         <div class="result"><div class="k">Ganancia bruta acumulada</div><div class="v" id="monthlyGross">—</div></div>
         <div class="result"><div class="k">Retefuente estimada</div><div class="v" id="monthlyTax">—</div></div>
         <div class="result"><div class="k">Ganancia neta acumulada</div><div class="v" id="monthlyNet">—</div></div>
-        <div class="result main"><div class="k">CAPITAL FINAL NETO</div><div class="v" id="monthlyFinalNet">—</div></div>
+        <div class="result main"><div class="k" id="monthlyFinalNetLabel">CAPITAL FINAL NETO</div><div class="v" id="monthlyFinalNet">—</div></div>
       </div>
       <div class="table-scroll">
         <table>
@@ -522,8 +533,11 @@ th{font-size:11px;color:#66717d}
    $('monthlyTax').textContent=money(tax);
    $('monthlyNet').textContent=money(netGain);
    $('monthlyFinalNet').textContent=money(finalNet);
+
    const finalLabel=$('monthlyFinalNetLabel');
-   if(finalLabel) finalLabel.textContent='Capital final neto · E.A. '+(x.ea*100).toFixed(2)+'% · '+months+' '+(months===1?'mes':'meses');
+   if(finalLabel){
+     finalLabel.textContent='CAPITAL FINAL NETO (TASA E.A. '+(x.ea*100).toFixed(2)+'% - A '+months+' '+(months===1?'MES':'MESES')+')';
+   }
 
    const eaInfo=$('monthlyEaInfo');
    if(eaInfo) eaInfo.textContent=(x.ea*100).toFixed(2)+'%';
