@@ -101,6 +101,21 @@ th{font-size:11px;color:#66717d}
 #sumar .sumar-new-period button{width:auto;height:42px;padding:0 14px;border-radius:10px}
 #sumar .sumar-new-period .small{max-width:620px}
 </style>
+
+<style id="monthly-clean-style">
+  #monthly .monthly-clean-date { font-size: 0.92rem; }
+  #monthlyRateInfo { line-height: 1.35; }
+</style>
+
+<style id="monthly-compact-v31">
+  #monthly .results { gap:8px; margin-top:8px !important; }
+  #monthly .result { padding:9px 10px !important; min-height:0 !important; }
+  #monthly .result .k { font-size:.70rem !important; line-height:1.2; }
+  #monthly .result .v { font-size:1.02rem !important; line-height:1.25; }
+  #monthly .result.main .v { font-size:1.12rem !important; }
+  #monthly .small { font-size:.78rem !important; }
+  #monthlyEndDisplay { font-size:.82rem !important; }
+</style>
 </head>
 <body>
 <div class="wrap">
@@ -171,7 +186,9 @@ th{font-size:11px;color:#66717d}
   <section id="monthly" class="page">
     <div class="card">
       <h2 style="margin-top:0">Proyección mes a mes</h2>
-      <p class="small">Proyección con la misma fórmula mensual del Simulador. Cada mes representa 30 días y la tasa se calcula como (1 + E.A.)^(30/365) − 1. Los valores de la tabla son <strong>brutos</strong>; la retención se muestra por separado en el resumen.</p>
+      <div class="small" id="monthlyRateInfo" style="margin:4px 0 12px">
+        Basado en la simulación, con un E.A. de <strong id="monthlyEaInfo">—</strong>.
+      </div>
       <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin:16px 0">
         <label style="min-width:180px;flex:0 1 240px">
           <span class="small" style="display:block;margin-bottom:6px">Fecha de inicio</span>
@@ -188,8 +205,8 @@ th{font-size:11px;color:#66717d}
         </label>
       </div>
 
-      <div class="results" style="margin-top:10px;margin-bottom:18px">
-        <div class="result main"><div class="k">Fecha estimada de vencimiento</div><div class="v" id="monthlyEndDisplay">—</div></div>
+      <div class="small" style="margin:2px 0 16px">
+        <strong>Vencimiento estimado:</strong> <span id="monthlyEndDisplay">—</span>
       </div>
 
       <div class="results" style="margin-top:10px;margin-bottom:18px">
@@ -199,7 +216,6 @@ th{font-size:11px;color:#66717d}
         <div class="result"><div class="k">Ganancia neta acumulada</div><div class="v" id="monthlyNet">—</div></div>
         <div class="result main"><div class="k">CAPITAL FINAL NETO</div><div class="v" id="monthlyFinalNet">—</div></div>
       </div>
-      <div class="note" id="monthlyNote" style="margin-bottom:14px"></div>
       <div class="table-scroll">
         <table>
           <thead><tr><th>Mes</th><th>Capital inicial</th><th>Ganancia del mes</th><th>Ganancia acumulada</th><th>Capital final bruto</th></tr></thead>
@@ -506,12 +522,11 @@ th{font-size:11px;color:#66717d}
    $('monthlyTax').textContent=money(tax);
    $('monthlyNet').textContent=money(netGain);
    $('monthlyFinalNet').textContent=money(finalNet);
+   const finalLabel=$('monthlyFinalNetLabel');
+   if(finalLabel) finalLabel.textContent='Capital final neto · E.A. '+(x.ea*100).toFixed(2)+'% · '+months+' '+(months===1?'mes':'meses');
 
-   const equivalentDays=months*30;
-   $('monthlyNote').innerHTML=
-     '<strong>'+months+' '+(months===1?'mes':'meses')+':</strong> la tabla muestra la ganancia <strong>bruta</strong> antes de impuestos. '+
-     'La fecha de vencimiento es únicamente una visualización basada en la fecha de inicio y el número de meses seleccionado. '+
-     'La rentabilidad utiliza '+equivalentDays+' días y la fórmula <strong>(1 + E.A.)^(30/365) − 1</strong>, igual a la del Simulador.';
+   const eaInfo=$('monthlyEaInfo');
+   if(eaInfo) eaInfo.textContent=(x.ea*100).toFixed(2)+'%';
  }
  function renderRates(x){
    const body=$('ratesBody'),cards=$('scenarioCards');
